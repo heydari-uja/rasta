@@ -22,6 +22,11 @@ class Attachment extends Model
 
     protected $hidden = ['path', 'file_name'];
 
+    public function comment()
+    {
+        return $this->belongsTo(Comment::class);
+    }
+
     public function task()
     {
         return $this->belongsTo(Task::class);

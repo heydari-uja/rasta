@@ -6,7 +6,7 @@ use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Member;
-use App\Models\Notice;
+use App\Models\Notification;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskActivity;
@@ -35,9 +35,9 @@ class WorkspaceController extends Controller
     public function data(Request $r)
     {
         $projects = Project::with(['goal', 'stages', 'memberStages.productStage', 'members'])->withCount(['tasks', 'tasks as completed_count' => fn ($q) => $q->whereNotNull('completed_at')])->get();
-        $tasks = Task::whereIn('project_id', $projects->pluck('id'))->with(['subtasks', 'labels', 'members', 'assignee', 'memberStage'])->latest()->get();
+        $tasks = Task::whereIn('project_id', $projects->pluck('id'))->with(['subtasks', 'labels', 'assignee', 'memberStage'])->latest()->get();
 
-        return ['user' => $r->user(), 'members' => Member::where('active', true)->get(), 'projects' => $projects, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notices' => Notice::where('member_id', $r->user()->id)->latest()->limit(30)->get()];
+        return ['user' => $r->user(), 'projects' => $projects, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notifications' => Notification::where('member_id', $r->user()->id)->with(['author', 'task'])->latest()->limit(30)->get()];
     }
 
     public function project(Request $r)
@@ -131,36 +131,28 @@ class WorkspaceController extends Controller
         return ['ok' => true];
     }
 
-    public function member(Request $r, Project $project)
-    {
-        ProjectAccess::check($project, 'owner');
-        $v = $r->validate(['member_id' => 'required|integer|exists:members,id']);
-        $project->members()->syncWithoutDetaching([$v['member_id']]);
-
-        return ['ok' => true];
-    }
-
     public function taskDetail(Task $task)
     {
         ProjectAccess::check($task->project);
 
-        return $task->load(['subtasks', 'labels', 'members', 'comments.user', 'attachments.user', 'activities.member', 'memberStage']);
+        return $task->load(['subtasks', 'labels', 'comments.user', 'attachments.user', 'activities.member', 'memberStage']);
     }
 
     public function saveTask(Request $r, ?Task $task = null)
     {
         $project = $task?->project ?? Project::findOrFail($r->input('project_id'));
         ProjectAccess::check($project, 'write');
+        if ($r->has('owner_id') || $r->has('members')) {
+            throw ValidationException::withMessages(['owner_id' => 'مسئول تسک قابل تغییر نیست.']);
+        }
+        $ownerId = $task?->created_by ?? $r->user()->id;
         $v = $r->validate([
             'title' => 'required|string|max:200',
             'description' => 'nullable|string|max:10000',
             'member_stage_id' => 'nullable|integer',
-            'owner_id' => ['required', 'integer', Rule::exists('project_members', 'member_id')->where('project_id', $project->id)],
-            'start_date' => 'required|date_format:Y-m-d',
-            'due_date' => 'required|date_format:Y-m-d|after_or_equal:start_date',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'due_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
             'completed' => 'boolean',
-            'members' => 'present|array|max:100',
-            'members.*' => ['integer', 'distinct', Rule::exists('project_members', 'member_id')->where('project_id', $project->id)],
             'labels' => 'present|array|max:30',
             'labels.*' => 'integer|distinct',
             'subtasks' => 'present|array|max:100',
@@ -169,13 +161,10 @@ class WorkspaceController extends Controller
             'subtasks.*.completed' => 'required|boolean',
         ]);
 
-        $memberStage = null;
         if (! empty($v['member_stage_id'])) {
-            $memberStage = $project->memberStages()
-                ->where('member_id', $v['owner_id'])
-                ->find($v['member_stage_id']);
+            $memberStage = $project->memberStages()->where('member_id', $ownerId)->find($v['member_stage_id']);
             if (! $memberStage) {
-                throw ValidationException::withMessages(['member_stage_id' => 'مرحله انتخاب‌شده متعلق به مسئول این تسک نیست.']);
+                throw ValidationException::withMessages(['member_stage_id' => 'مرحله انتخاب‌شده متعلق به سازنده این تسک نیست.']);
             }
             if (! $memberStage->product_stage_id) {
                 throw ValidationException::withMessages(['member_stage_id' => 'این مرحله شخصی به مرحله محصول متصل نیست.']);
@@ -187,29 +176,24 @@ class WorkspaceController extends Controller
             throw ValidationException::withMessages(['member_stage_id' => 'ابتدا یک «مرحله من» انتخاب یا همین‌جا ایجاد کنید.']);
         }
 
-        $validLabels = Label::where(fn ($q) => $q
-            ->where('project_id', $project->id)
-            ->orWhere(fn ($q) => $q->whereNull('project_id')->where('member_id', $r->user()->id)))
-            ->pluck('id');
+        $validLabels = Label::where(fn ($q) => $q->where('project_id', $project->id)->orWhere(fn ($q) => $q->whereNull('project_id')->where('member_id', $r->user()->id)))->pluck('id');
         if (collect($v['labels'])->diff($validLabels)->isNotEmpty()) {
             throw ValidationException::withMessages(['labels' => 'برچسب انتخاب‌شده برای این تسک مجاز نیست.']);
         }
 
         $new = ! $task;
-        $oldAssignee = $task?->owner_id;
-        $before = $task ? $task->only(['title', 'start_date', 'due_date', 'product_stage_id', 'owner_id', 'completed_at']) : [];
+        $before = $task ? $task->only(['title', 'start_date', 'due_date', 'product_stage_id', 'completed_at']) : [];
         $oldStage = $task?->stage?->title;
-        $oldOwner = $task?->assignee?->name;
 
-        $task = DB::transaction(function () use ($v, $project, $task, $r) {
-            $fields = collect($v)->except(['members', 'labels', 'subtasks', 'completed'])->all();
+        $task = DB::transaction(function () use ($v, $project, $task, $r, $ownerId) {
+            $fields = collect($v)->except(['labels', 'subtasks', 'completed'])->all();
+            $fields['owner_id'] = $ownerId;
             $fields['completed_at'] = ($v['completed'] ?? false) ? ($task?->completed_at ?? now()) : null;
             if ($task) {
                 $task->update($fields);
             } else {
                 $task = $project->tasks()->create([...$fields, 'created_by' => $r->user()->id]);
             }
-            $task->members()->sync($v['members']);
             $task->labels()->sync($v['labels']);
             $keep = [];
             foreach ($v['subtasks'] as $i => $subtask) {
@@ -241,9 +225,6 @@ class WorkspaceController extends Controller
             if ((int) $before['product_stage_id'] !== (int) $task->product_stage_id) {
                 $this->activity($task, $r->user(), 'stage', $oldStage, $task->stage?->title);
             }
-            if ((int) $before['owner_id'] !== (int) $task->owner_id) {
-                $this->activity($task, $r->user(), 'assignee', $oldOwner, $task->assignee?->name);
-            }
             $wasCompleted = ! empty($before['completed_at']);
             $isCompleted = ! empty($task->completed_at);
             if ($wasCompleted !== $isCompleted) {
@@ -251,16 +232,7 @@ class WorkspaceController extends Controller
             }
         }
 
-        if ($task->owner_id && $task->owner_id !== $r->user()->id) {
-            Notice::create([
-                'member_id' => $task->owner_id,
-                'task_id' => $task->id,
-                'type' => ($new || $oldAssignee !== $task->owner_id ? 'assigned' : 'edited'),
-                'body' => ($new || $oldAssignee !== $task->owner_id ? 'تسک جدید برای شما: ' : 'تسک به‌روزرسانی شد: ').$task->title,
-            ]);
-        }
-
-        return response()->json($task->load(['subtasks', 'labels', 'members', 'activities.member', 'memberStage']), $new ? 201 : 200);
+        return response()->json($task->load(['subtasks', 'labels', 'activities.member', 'memberStage']), $new ? 201 : 200);
     }
 
     public function moveTaskStage(Request $r, Task $task)
@@ -338,7 +310,13 @@ class WorkspaceController extends Controller
         $v = $r->validate(['body' => 'required|string|max:5000']);
         $c = $task->comments()->create([...$v, 'member_id' => $r->user()->id]);
         if ($task->owner_id && $task->owner_id !== $r->user()->id) {
-            Notice::create(['member_id' => $task->owner_id, 'task_id' => $task->id, 'type' => 'comment', 'body' => 'نظر جدید در «'.$task->title.'»']);
+            Notification::create([
+                'member_id' => $task->owner_id,
+                'author_id' => $r->user()->id,
+                'task_id' => $task->id,
+                'comment_id' => $c->id,
+                'excerpt' => mb_substr($c->body, 0, 240),
+            ]);
         }
 
         return response()->json($c->load('user'), 201);
@@ -361,11 +339,25 @@ class WorkspaceController extends Controller
     public function upload(Request $r, Task $task)
     {
         ProjectAccess::check($task->project, 'write');
-        $r->validate(['file' => 'required|file|max:5120|mimes:pdf,png,jpg,jpeg,webp,txt|extensions:pdf,png,jpg,jpeg,webp,txt']);
+        $v = $r->validate([
+            'file' => 'required|file|max:5120|mimes:pdf,png,jpg,jpeg,webp,txt|extensions:pdf,png,jpg,jpeg,webp,txt',
+            'comment_id' => 'nullable|integer',
+        ]);
+        if (! empty($v['comment_id'])) {
+            abort_unless($task->comments()->whereKey($v['comment_id'])->exists(), 422, 'نظر انتخاب‌شده معتبر نیست.');
+        }
         $f = $r->file('file');
         $path = $f->store('attachments', 'local');
 
-        return response()->json($task->attachments()->create(['member_id' => $r->user()->id, 'original_name' => mb_substr(basename($f->getClientOriginalName()), 0, 200), 'file_name' => basename($path), 'mime' => $f->getMimeType(), 'size' => $f->getSize(), 'path' => $path])->load('user'), 201);
+        return response()->json($task->attachments()->create([
+            'comment_id' => $v['comment_id'] ?? null,
+            'member_id' => $r->user()->id,
+            'original_name' => mb_substr(basename($f->getClientOriginalName()), 0, 200),
+            'file_name' => basename($path),
+            'mime' => $f->getMimeType(),
+            'size' => $f->getSize(),
+            'path' => $path,
+        ])->load('user'), 201);
     }
 
     public function download(Attachment $attachment)
@@ -385,9 +377,14 @@ class WorkspaceController extends Controller
         return response()->noContent();
     }
 
-    public function notices(Request $r)
+    public function notifications(Request $r, ?Notification $notification = null)
     {
-        Notice::where('member_id', $r->user()->id)->whereNull('read_at')->update(['read_at' => now()]);
+        if ($notification) {
+            abort_unless($notification->member_id === $r->user()->id, 404);
+            $notification->update(['read_at' => $notification->read_at ?? now()]);
+        } else {
+            Notification::where('member_id', $r->user()->id)->whereNull('read_at')->update(['read_at' => now()]);
+        }
 
         return ['ok' => true];
     }

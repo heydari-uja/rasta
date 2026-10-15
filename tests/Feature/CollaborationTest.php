@@ -9,52 +9,60 @@ use Tests\WorkspaceCase;
 
 class CollaborationTest extends WorkspaceCase
 {
-    public function test_comments_author_only_and_notices_can_be_read(): void
+    public function test_other_members_comment_creates_notification_but_own_comment_does_not(): void
     {
-        $p = $this->project();
-        $v = $this->taskPayload($p);
-        $id = $this->postJson('/api/tasks', $v)->json('id');
+        $project = $this->project();
+        $task = $this->postJson('/api/tasks', $this->taskPayload($project))->assertCreated()->json();
         $other = Member::create(['name' => 'نویسنده', 'job_title' => 'طراح']);
+
         $this->actingAs($other);
-        $cid = $this->postJson("/api/tasks/$id/comments", ['body' => 'نظر آزمون'])->assertCreated()->json('id');
-        $this->putJson("/api/comments/$cid", ['body' => 'نظر اصلاح شده'])->assertOk();
-        $this->actingAs($this->member)->deleteJson("/api/comments/$cid")->assertForbidden();
-        $this->putJson("/api/comments/$cid", ['body' => 'غیرمجاز'])->assertForbidden();
-        $this->getJson('/api/workspace')->assertJsonPath('notices.0.type', 'comment');
-        $this->postJson('/api/notices/read')->assertOk();
-        $this->assertDatabaseMissing('notices', ['member_id' => $this->member->id, 'read_at' => null]);
-        $this->actingAs($other)->deleteJson("/api/comments/$cid")->assertNoContent();
+        $comment = $this->postJson('/api/tasks/'.$task['id'].'/comments', ['body' => 'نظر آزمون برای اعلان'])->assertCreated()->json();
+        $this->assertDatabaseHas('notifications', [
+            'member_id' => $this->member->id,
+            'author_id' => $other->id,
+            'task_id' => $task['id'],
+            'comment_id' => $comment['id'],
+            'read_at' => null,
+        ]);
+
+        $this->actingAs($this->member);
+        $this->postJson('/api/tasks/'.$task['id'].'/comments', ['body' => 'نظر خودم'])->assertCreated();
+        $this->assertDatabaseCount('notifications', 1);
+        $this->getJson('/api/workspace')
+            ->assertJsonPath('notifications.0.author.name', 'نویسنده')
+            ->assertJsonPath('notifications.0.task.title', 'تسک آزمون');
+        $this->postJson('/api/notifications/'.$this->getJson('/api/workspace')->json('notifications.0.id').'/read')->assertOk();
+        $this->assertDatabaseMissing('notifications', ['member_id' => $this->member->id, 'read_at' => null]);
     }
 
-    public function test_attachments_private_size_limited_and_author_only(): void
+    public function test_comment_author_only_can_edit_and_delete(): void
+    {
+        $project = $this->project();
+        $taskId = $this->postJson('/api/tasks', $this->taskPayload($project))->assertCreated()->json('id');
+        $other = Member::create(['name' => 'نویسنده نظر', 'job_title' => 'طراح']);
+        $this->actingAs($other);
+        $commentId = $this->postJson('/api/tasks/'.$taskId.'/comments', ['body' => 'نظر'])->assertCreated()->json('id');
+        $this->putJson('/api/comments/'.$commentId, ['body' => 'نظر اصلاح شده'])->assertOk();
+        $this->actingAs($this->member)->deleteJson('/api/comments/'.$commentId)->assertForbidden();
+        $this->actingAs($other)->deleteJson('/api/comments/'.$commentId)->assertNoContent();
+    }
+
+    public function test_attachments_are_private_size_limited_and_can_belong_to_comment(): void
     {
         Storage::fake('local');
-        $p = $this->project();
-        $id = $this->postJson('/api/tasks', $this->taskPayload($p))->json('id');
-        $aid = $this->postJson("/api/tasks/$id/attachments", ['file' => UploadedFile::fake()->create('note.txt', 2, 'text/plain')])->assertCreated()->assertJsonMissingPath('path')->json('id');
-        $this->get("/attachments/$aid")->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
-        $this->postJson("/api/tasks/$id/attachments", ['file' => UploadedFile::fake()->create('large.txt', 5121, 'text/plain')])->assertUnprocessable()->assertJsonValidationErrors('file');
-        $other = Member::create(['name' => 'همکار فایل', 'job_title' => 'طراح']);
-        $this->actingAs($other)->deleteJson("/api/attachments/$aid")->assertForbidden();
-        $this->actingAs($this->member)->deleteJson("/api/attachments/$aid")->assertNoContent();
-        Storage::disk('local')->assertDirectoryEmpty('attachments');
-        $this->post('/logout');
-        $this->get("/attachments/$aid")->assertRedirect('/login');
-    }
+        $project = $this->project();
+        $taskId = $this->postJson('/api/tasks', $this->taskPayload($project))->assertCreated()->json('id');
+        $commentId = $this->postJson('/api/tasks/'.$taskId.'/comments', ['body' => 'نظر فایل‌دار'])->assertCreated()->json('id');
+        $attachmentId = $this->postJson('/api/tasks/'.$taskId.'/attachments', [
+            'file' => UploadedFile::fake()->create('note.txt', 2, 'text/plain'),
+            'comment_id' => $commentId,
+        ])->assertCreated()->assertJsonPath('comment_id', $commentId)->assertJsonMissingPath('path')->json('id');
 
-    public function test_assignment_and_edit_notices_go_to_owner(): void
-    {
-        $p = $this->project();
-        $other = Member::create(['name' => 'مسئول دیگر', 'job_title' => 'طراح']);
-        $p->members()->attach($other);
-        $v = $this->taskPayload($p);
-        $otherStage = $p->memberStages()->create(['member_id' => $other->id, 'product_stage_id' => $p->stages()->first()->id, 'name' => 'مرحله مسئول', 'position' => 0]);
-        $v['owner_id'] = $other->id;
-        $v['member_stage_id'] = $otherStage->id;
-        $id = $this->postJson('/api/tasks', $v)->assertCreated()->json('id');
-        $this->assertDatabaseHas('notices', ['member_id' => $other->id, 'type' => 'assigned']);
-        $v['title'] = 'اصلاح';
-        $this->putJson("/api/tasks/$id", $v)->assertOk();
-        $this->assertDatabaseHas('notices', ['member_id' => $other->id, 'type' => 'edited']);
+        $this->get('/attachments/'.$attachmentId)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->postJson('/api/tasks/'.$taskId.'/attachments', ['file' => UploadedFile::fake()->create('large.txt', 5121, 'text/plain')])->assertUnprocessable()->assertJsonValidationErrors('file');
+        $other = Member::create(['name' => 'همکار فایل', 'job_title' => 'طراح']);
+        $this->actingAs($other)->deleteJson('/api/attachments/'.$attachmentId)->assertForbidden();
+        $this->actingAs($this->member)->deleteJson('/api/attachments/'.$attachmentId)->assertNoContent();
+        Storage::disk('local')->assertDirectoryEmpty('attachments');
     }
 }

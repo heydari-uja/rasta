@@ -41,12 +41,11 @@ class ProjectTest extends WorkspaceCase
         }
     }
 
-    public function test_all_active_members_can_edit_goal_without_roles(): void
+    public function test_all_active_members_can_edit_goal_without_member_management_route(): void
     {
         $p = $this->project();
         $other = Member::create(['name' => 'همکار', 'job_title' => 'توسعه']);
         $this->actingAs($other)->putJson('/api/projects/'.$p->id.'/goal', $this->payload()['goal'])->assertOk();
-        $this->postJson('/api/projects/'.$p->id.'/members', ['member_id' => $other->id])->assertOk();
-        $this->assertCount(2, $p->members);
+        $this->postJson('/api/projects/'.$p->id.'/members', ['member_id' => $other->id])->assertNotFound();
     }
 }

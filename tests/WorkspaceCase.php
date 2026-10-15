@@ -40,6 +40,6 @@ abstract class WorkspaceCase extends TestCase
         $stage = $p->memberStages()->where('member_id', $this->member->id)->first()
             ?? $p->memberStages()->create(['member_id' => $this->member->id, 'product_stage_id' => $p->stages()->first()->id, 'name' => 'مرحله من', 'position' => 0]);
 
-        return ['project_id' => $p->id, 'member_stage_id' => $stage->id, 'owner_id' => $this->member->id, 'title' => 'تسک آزمون', 'start_date' => '2026-10-01', 'due_date' => '2026-10-31', 'members' => [], 'labels' => [], 'subtasks' => []];
+        return ['project_id' => $p->id, 'member_stage_id' => $stage->id, 'title' => 'تسک آزمون', 'start_date' => '2026-10-01', 'due_date' => '2026-10-31', 'labels' => [], 'subtasks' => []];
     }
 }

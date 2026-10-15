@@ -187,10 +187,9 @@ Alpine.data("datePicker", () => ({
 Alpine.data("workspace", () => ({
     user: {},
     projects: [],
-    members: [],
     tasks: [],
     labels: [],
-    notices: [],
+    notifications: [],
     page: "dashboard",
     projectId: null,
     loading: true,
@@ -210,6 +209,16 @@ Alpine.data("workspace", () => ({
     taskForm: {},
     pendingFiles: [],
     commentText: "",
+    commentFiles: [],
+    taskDetailsEditing: false,
+    taskEditSnapshot: null,
+    labelFilterId: null,
+    taskDateOpen: false,
+    taskDateMode: "single",
+    taskDateCursor: new Date(),
+    taskDateDays: [],
+    taskDatePickingEnd: false,
+    taskDateStyle: "",
     labelQuery: "",
     newLabelName: "",
     inlineStage: false,
@@ -223,7 +232,6 @@ Alpine.data("workspace", () => ({
     stageProjectId: null,
     labelForm: {},
     goalForm: {},
-    memberForm: { member_id: "" },
     dragIndex: null,
     dragStage: null,
     teamDrag: null,
@@ -242,6 +250,7 @@ Alpine.data("workspace", () => ({
         window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
             if (this.theme === "system") this.applyTheme();
         });
+        document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
         await this.refresh();
         this.route();
         window.addEventListener("popstate", () => this.route());
@@ -366,11 +375,7 @@ Alpine.data("workspace", () => ({
         return this.projects.find((p) => p.id === this.projectId);
     },
     get myTasks() {
-        return this.tasks.filter(
-            (t) =>
-                t.owner_id === this.user.id ||
-                t.members.some((m) => m.id === this.user.id),
-        );
+        return this.tasks.filter((t) => t.owner_id === this.user.id);
     },
     get todayTasks() {
         return this.myTasks.filter(
@@ -378,18 +383,19 @@ Alpine.data("workspace", () => ({
         );
     },
     get deadlines() {
-        const end=new Date(today()+"T12:00:00"); end.setDate(end.getDate()+7);
-        const limit=end.toLocaleDateString("en-CA");
-        return this.myTasks.filter(t=>!t.completed_at&&t.due_date>=today()&&t.due_date<=limit);
+        const end = new Date(today() + "T12:00:00");
+        end.setDate(end.getDate() + 7);
+        const limit = end.toLocaleDateString("en-CA");
+        return this.myTasks.filter((task) => !task.completed_at && task.due_date && task.due_date >= today() && task.due_date <= limit);
     },
     get upcoming() {
         return [...this.myTasks]
-            .filter((t) => !t.completed_at)
+            .filter((t) => !t.completed_at && t.due_date)
             .sort((a, b) => a.due_date.localeCompare(b.due_date))
             .slice(0, 5);
     },
     get unread() {
-        return this.notices.filter((n) => !n.read_at).length;
+        return this.notifications.filter((n) => !n.read_at).length;
     },
     get boardProjects() {
         return this.projects.filter(
@@ -463,7 +469,8 @@ Alpine.data("workspace", () => ({
         }
         try {
             await this.api(`/projects/${project.id}/stages`, "POST", payload);
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.inlineColumnForm.title = "";
             this.inlineColumnForm.description = "";
             this.notify("ستون جدید ساخته شد.");
@@ -509,15 +516,22 @@ Alpine.data("workspace", () => ({
         const payload = {
             ...clone(task),
             labels: task.labels.map((item) => item.id),
-            members: task.members.map((item) => item.id),
             completed: !!task.completed_at,
             subtasks: task.subtasks.map((item) => ({ id: item.id, title: item.title, completed: item.id === subtask.id ? !item.completed_at : !!item.completed_at })),
         };
         try {
-            await this.api(`/tasks/${task.id}`, "PUT", payload);
+            await this.api(`/tasks/${task.id}`, "PUT", this.taskPayload(payload));
             subtask.completed_at = subtask.completed_at ? null : new Date().toISOString();
             this.notify("ذخیره شد");
         } catch (e) { this.fail(e); }
+    },
+    taskPayload(source = this.taskForm) {
+        const data = clone(source);
+        delete data.id; delete data.owner_id; delete data.assignee; delete data.members; delete data.comments; delete data.attachments; delete data.activities; delete data.created_at; delete data.updated_at; delete data.completed_at;
+        data.labels = (data.labels || []).map((l) => typeof l === 'object' ? l.id : l);
+        data.subtasks = (data.subtasks || []).map((st) => ({id:st.id || null,title:st.title,completed:!!(st.completed || st.completed_at)}));
+        data.completed = !!(source.completed || source.completed_at);
+        return data;
     },
     scheduleTaskAutosave() {
         if (!this.taskForm.id || !this.canWrite(this.formProject)) return;
@@ -530,7 +544,7 @@ Alpine.data("workspace", () => ({
         this.taskSaving = true;
         this.errors = {};
         try {
-            await this.api(`/tasks/${this.taskForm.id}`, "PUT", this.taskForm);
+            await this.api(`/tasks/${this.taskForm.id}`, "PUT", this.taskPayload());
             const local = this.tasks.find((item) => item.id === this.taskForm.id);
             if (local) {
                 Object.assign(local, { title: this.taskForm.title, description: this.taskForm.description, owner_id: this.taskForm.owner_id, member_stage_id: this.taskForm.member_stage_id, product_stage_id: this.taskForm.product_stage_id, start_date: this.taskForm.start_date, due_date: this.taskForm.due_date });
@@ -598,7 +612,7 @@ Alpine.data("workspace", () => ({
         return `${fa(t.subtasks.filter((s) => s.completed_at || s.completed).length)}/${fa(t.subtasks.length)}`;
     },
     overdue(t) {
-        return !t.completed_at && t.due_date < today();
+        return !!t.due_date && !t.completed_at && t.due_date < today();
     },
     canWrite(project) {
         return !!project;
@@ -636,7 +650,6 @@ Alpine.data("workspace", () => ({
             stage: this.stageForm,
             label: this.labelForm,
             goal: this.goalForm,
-            member: this.memberForm,
             files: this.pendingFiles.map((f) => f.name),
             comment: this.commentText,
         });
@@ -684,7 +697,9 @@ Alpine.data("workspace", () => ({
         if (task && !task.id) return;
         this.busy = false;
         this.pendingFiles = [];
+        this.commentFiles = [];
         this.commentText = "";
+        this.taskDetailsEditing = !task;
         this.labelQuery = "";
         this.inlineStage = false;
         let p =
@@ -707,7 +722,6 @@ Alpine.data("workspace", () => ({
             ? {
                   ...clone(task),
                   labels: task.labels.map((l) => l.id),
-                  members: task.members.map((m) => m.id),
                   completed: !!task.completed_at,
                   subtasks: task.subtasks.map((s) => ({
                       ...s,
@@ -721,7 +735,6 @@ Alpine.data("workspace", () => ({
                   product_stage_id: stage?.product_stage_id || null,
                   member_stage_id: stage?.member_id === this.user.id ? stage.id : (this.myStages(p).find((s) => !stage || s.product_stage_id === stage.id)?.id || ""),
                   owner_id: this.user.id,
-                  members: [],
                   labels: [],
                   start_date: today(),
                   due_date: today(),
@@ -737,26 +750,55 @@ Alpine.data("workspace", () => ({
         return this.projects.find((p) => p.id == this.taskForm.project_id);
     },
     get formMyStages() {
-        return (this.formProject?.member_stages || []).filter((stage) => stage.member_id == this.taskForm.owner_id);
+        return (this.formProject?.member_stages || []).filter((stage) => stage.member_id == (this.taskForm.created_by || this.user.id));
     },
+    get selectedLabel() { return this.labels.find((l) => l.id == this.labelFilterId) || null; },
+    get selectedLabelTasks() { return this.labelFilterId ? this.tasks.filter((t) => t.labels.some((l) => l.id == this.labelFilterId)) : []; },
     get formLabels() {
         return this.labels.filter(
             (l) => (l.project_id == this.taskForm.project_id || (!l.project_id && l.member_id === this.user.id)) && l.name.includes(this.labelQuery),
         );
     },
     projectChanged() {
-        this.taskForm.owner_id = this.user.id;
         this.taskForm.member_stage_id = "";
         this.taskForm.product_stage_id = null;
-        this.taskForm.members = [];
         this.taskForm.labels = [];
         this.autosaveTaskNow();
     },
-    ownerChanged() {
-        this.taskForm.member_stage_id = "";
-        this.taskForm.product_stage_id = null;
-        this.autosaveTaskNow();
+    startTaskDetailsEdit() {
+        this.taskEditSnapshot = {title:this.taskForm.title, description:this.taskForm.description};
+        this.taskDetailsEditing = true;
+        this.$nextTick(() => document.querySelector('.task-title-editor')?.focus());
     },
+    cancelTaskDetailsEdit() {
+        if (this.taskEditSnapshot) Object.assign(this.taskForm, this.taskEditSnapshot);
+        this.taskDetailsEditing = false;
+    },
+    async saveTaskDetailsEdit() {
+        if (!this.taskForm.id) return;
+        await this.autosaveTaskNow();
+        this.taskDetailsEditing = false;
+    },
+    autoGrow(e) { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px'; },
+    taskDateLabel() {
+        const a=this.taskForm.start_date,b=this.taskForm.due_date; if(!a&&!b)return 'بدون تاریخ';
+        const fmt=(x,year=false)=>cleanPersianDate(new Intl.DateTimeFormat('fa-IR-u-ca-persian',{day:'numeric',month:'long',...(year?{year:'numeric'}:{})}).format(new Date(x+'T12:00:00')));
+        const cy=new Intl.DateTimeFormat('en-US-u-ca-persian',{year:'numeric'}).format(new Date());
+        const sy=a?new Intl.DateTimeFormat('en-US-u-ca-persian',{year:'numeric'}).format(new Date(a+'T12:00:00')):cy;
+        const ey=b?new Intl.DateTimeFormat('en-US-u-ca-persian',{year:'numeric'}).format(new Date(b+'T12:00:00')):cy;
+        if(a===b||!b)return fmt(a,sy!==cy); return fmt(a,sy!==cy)+' تا '+fmt(b,ey!==cy);
+    },
+    openTaskDate(trigger) { this.taskDateOpen=true; this.taskDatePickingEnd=false; this.taskDateMode=this.taskForm.start_date===this.taskForm.due_date?'single':'range'; this.taskDateCursor=new Date((this.taskForm.start_date||today())+'T12:00:00'); this.renderTaskDate(); const r=trigger?.getBoundingClientRect(); if(r){const w=Math.min(320,innerWidth-24);const left=Math.max(12,Math.min(innerWidth-w-12,r.left));const below=r.bottom+6;const top=below+430<innerHeight?below:Math.max(12,r.top-430);this.taskDateStyle=`position:fixed;top:${top}px;left:${left}px;width:${w}px`; } },
+    taskDateHeading(){return cleanPersianDate(new Intl.DateTimeFormat('fa-IR-u-ca-persian',{month:'long',year:'numeric'}).format(this.taskDateCursor));},
+    renderTaskDate() {
+        const d=new Date(this.taskDateCursor), p=Object.fromEntries(new Intl.DateTimeFormat('en-US-u-ca-persian',{year:'numeric',month:'numeric',day:'numeric'}).formatToParts(d).filter(x=>x.type!=='literal').map(x=>[x.type,+x.value]));
+        const start=new Date(d); start.setDate(start.getDate()-p.day+1); this.taskDateCursor=start;
+        const off=(start.getDay()+1)%7; this.taskDateDays=Array.from({length:42},(_,i)=>{const x=new Date(start);x.setDate(x.getDate()+i-off);const iso=x.toLocaleDateString('en-CA');const pp=Object.fromEntries(new Intl.DateTimeFormat('en-US-u-ca-persian',{month:'numeric',day:'numeric'}).formatToParts(x).filter(z=>z.type!=='literal').map(z=>[z.type,+z.value]));return {iso,label:fa(pp.day),muted:pp.month!==p.month};});
+    },
+    moveTaskDate(n){const d=new Date(this.taskDateCursor);d.setDate(d.getDate()+(n>0?32:-1));this.taskDateCursor=d;this.renderTaskDate();},
+    pickTaskDate(iso){ if(this.taskDateMode==='single'){this.taskForm.start_date=iso;this.taskForm.due_date=iso;this.taskDateOpen=false;this.autosaveTaskNow();return;} if(!this.taskDatePickingEnd){this.taskForm.start_date=iso;this.taskForm.due_date=iso;this.taskDatePickingEnd=true;}else{if(iso<this.taskForm.start_date){this.taskForm.due_date=this.taskForm.start_date;this.taskForm.start_date=iso;}else this.taskForm.due_date=iso;this.taskDatePickingEnd=false;this.taskDateOpen=false;this.autosaveTaskNow();}},
+    taskDateShortcut(kind){let d=new Date();if(kind==='tomorrow')d.setDate(d.getDate()+1);if(kind==='nextweek')d.setDate(d.getDate()+7);if(kind==='none'){this.taskForm.start_date=null;this.taskForm.due_date=null;this.taskDateOpen=false;return this.autosaveTaskNow();}const iso=d.toLocaleDateString('en-CA');this.taskForm.start_date=iso;this.taskForm.due_date=iso;this.taskDateOpen=false;this.autosaveTaskNow();},
+    taskDateClass(day){return {'range-day':this.taskDateMode==='range'&&day.iso>=this.taskForm.start_date&&day.iso<=this.taskForm.due_date,'range-edge':day.iso===this.taskForm.start_date||day.iso===this.taskForm.due_date,'is-today':day.iso===today(),'is-past':day.iso<today(),'muted':day.muted};},
     memberStageChanged() {
         const stage = this.formMyStages.find((item) => item.id == this.taskForm.member_stage_id);
         this.taskForm.product_stage_id = stage?.product_stage_id || null;
@@ -773,7 +815,7 @@ Alpine.data("workspace", () => ({
             const result = await this.api(
                 "/tasks" + (id ? "/" + id : ""),
                 id ? "PUT" : "POST",
-                this.taskForm,
+                this.taskPayload(),
             );
             this.taskForm.id = result.id;
             for (const file of [...this.pendingFiles]) {
@@ -794,7 +836,8 @@ Alpine.data("workspace", () => ({
                 this.commentText = "";
             }
             this.modal = null;
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.notify(id ? "تغییرات ذخیره شد." : "تسک جدید ساخته شد.");
         } catch (e) {
             this.fail(e);
@@ -825,7 +868,8 @@ Alpine.data("workspace", () => ({
                 try {
                     await this.api("/tasks/" + this.taskForm.id, "DELETE");
                     this.modal = null;
-                    await this.refresh();
+                    document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
                     this.notify("تسک حذف شد.");
                 } catch (e) {
                     this.fail(e);
@@ -849,7 +893,7 @@ Alpine.data("workspace", () => ({
             description: "",
             start_date: this.taskForm.start_date,
             end_date: this.taskForm.due_date,
-            member_id: this.taskForm.owner_id,
+            member_id: this.taskForm.created_by || this.user.id,
             product_stage_id: this.formProject?.stages?.[0]?.id || "",
         };
         this.inlineStage = true;
@@ -862,7 +906,8 @@ Alpine.data("workspace", () => ({
                 "POST",
                 this.inlineStageForm,
             );
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.taskForm.member_stage_id = stage.id;
             this.taskForm.product_stage_id = stage.product_stage_id;
             this.inlineStage = false;
@@ -923,6 +968,12 @@ Alpine.data("workspace", () => ({
                 { body: this.commentText },
             );
             this.taskForm.comments.push(c);
+            for (const file of [...this.commentFiles]) {
+                const data = new FormData(); data.append("file", file); data.append("comment_id", c.id);
+                const a = await this.api(`/tasks/${this.taskForm.id}/attachments`, "POST", data);
+                this.taskForm.attachments.push(a);
+            }
+            this.commentFiles = [];
             this.commentText = "";
             this.notify("نظر ثبت شد.");
         } catch (e) {
@@ -1021,7 +1072,8 @@ Alpine.data("workspace", () => ({
         this.busy = true;
         try {
             const p = await this.api("/projects", "POST", this.projectForm);
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.modal = null;
             this.go("projects", p.id);
             this.notify("پروژه شما آماده است.");
@@ -1075,7 +1127,8 @@ Alpine.data("workspace", () => ({
                 this.stageId ? "PUT" : "POST",
                 this.stageForm,
             );
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.modal = null;
             this.notify("مرحله ذخیره شد.");
         } catch (e) {
@@ -1106,7 +1159,8 @@ Alpine.data("workspace", () => ({
                     const res = await fetch("/api" + url, { method: "DELETE", headers, body: hasTasks ? JSON.stringify({ transfer_stage_id: Number(transferId) }) : null });
                     const data = res.status === 204 ? {} : await res.json();
                     if (!res.ok) throw data;
-                    await this.refresh();
+                    document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
                     this.modal = null;
                     this.notify("ستون حذف شد.");
                 } catch (e) {
@@ -1137,7 +1191,8 @@ Alpine.data("workspace", () => ({
                 "PUT",
                 { ids: stages.map((s) => s.id), member_id: user?.id },
             );
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.notify("ترتیب مراحل ذخیره شد.");
         } catch (e) {
             this.fail(e);
@@ -1170,7 +1225,8 @@ Alpine.data("workspace", () => ({
                 "PUT",
                 this.goalForm,
             );
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.modal = null;
             this.notify("هدف به‌روزرسانی شد.");
         } catch (e) {
@@ -1193,7 +1249,8 @@ Alpine.data("workspace", () => ({
                 this.labelForm.id ? "PUT" : "POST",
                 this.labelForm,
             );
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.modal = null;
             this.notify("برچسب ذخیره شد.");
         } catch (e) {
@@ -1209,7 +1266,8 @@ Alpine.data("workspace", () => ({
             async () => {
                 try {
                     await this.api("/labels/" + l.id, "DELETE");
-                    await this.refresh();
+                    document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
                     this.notify("برچسب حذف شد.");
                 } catch (e) {
                     this.fail(e);
@@ -1218,59 +1276,12 @@ Alpine.data("workspace", () => ({
             "حذف",
         );
     },
-    async saveMember() {
-        this.busy = true;
-        try {
-            await this.api(
-                `/projects/${this.projectId}/members`,
-                "POST",
-                this.memberForm,
-            );
-            await this.refresh();
-            this.modal = null;
-            this.notify("عضو به پروژه اضافه شد.");
-        } catch (e) {
-            this.fail(e);
-        } finally {
-            this.busy = false;
-        }
-    },
-    async uploadAvatar(file) {
-        if (!file) return;
-        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
-            return this.notify("عکس باید JPG، PNG یا WebP و حداکثر ۲ مگابایت باشد.", true);
-        }
-        this.busy = true;
-        try {
-            const data = new FormData();
-            data.append("avatar", file);
-            this.user = await this.api("/settings/avatar", "POST", data);
-            const index = this.members.findIndex((m) => m.id === this.user.id);
-            if (index >= 0) this.members[index] = this.user;
-            this.notify("عکس پروفایل ذخیره شد.");
-        } catch (e) {
-            this.fail(e);
-        } finally {
-            this.busy = false;
-        }
-    },
-    async removeAvatar() {
-        this.busy = true;
-        try {
-            this.user = await this.api("/settings/avatar", "DELETE");
-            const index = this.members.findIndex((m) => m.id === this.user.id);
-            if (index >= 0) this.members[index] = this.user;
-            this.notify("عکس پروفایل حذف شد.");
-        } catch (e) {
-            this.fail(e);
-        } finally {
-            this.busy = false;
-        }
-    },    async saveSettings() {
+    async saveSettings() {
         this.busy = true;
         try {
             await this.api("/settings", "PUT", this.account);
-            await this.refresh();
+            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
+        await this.refresh();
             this.notify("اطلاعات حساب ذخیره شد.");
         } catch (e) {
             this.fail(e);
@@ -1278,13 +1289,19 @@ Alpine.data("workspace", () => ({
             this.busy = false;
         }
     },
-    async readNotices() {
+    async readNotifications() {
         try {
-            await this.api("/notices/read", "POST");
-            this.notices.forEach((n) => (n.read_at = true));
-        } catch (e) {
-            this.fail(e);
-        }
+            await this.api("/notifications/read", "POST");
+            this.notifications.forEach((n) => (n.read_at = new Date().toISOString()));
+        } catch (e) { this.fail(e); }
+    },
+    async openNotification(n) {
+        const task = this.tasks.find((t) => t.id === n.task_id);
+        if (!task) return;
+        if (!n.read_at) { await this.api(`/notifications/${n.id}/read`, 'POST'); n.read_at = new Date().toISOString(); }
+        await this.openTask(task);
+        this.notificationsOpen = false;
+        this.$nextTick(() => setTimeout(() => document.querySelector('[data-comment-id="'+n.comment_id+'"]')?.scrollIntoView({behavior:"smooth",block:"center"}), 150));
     },
 }));
 window.Alpine = Alpine;

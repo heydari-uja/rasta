@@ -17,7 +17,7 @@ Route::middleware(SharedAccess::class)->group(function () {
 Route::middleware([SharedAccess::class, 'auth'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::redirect('/projects', '/dashboard');
-    foreach (['/dashboard', '/projects/{project}', '/projects/{project}/goal', '/projects/{project}/stages', '/projects/{project}/members', '/tasks', '/tasks/{task}', '/labels', '/settings'] as $path) {
+    foreach (['/dashboard', '/projects/{project}', '/projects/{project}/goal', '/projects/{project}/stages', '/tasks', '/tasks/{task}', '/labels', '/settings'] as $path) {
         Route::get($path, function () {
             return view('workspace');
         });
@@ -27,7 +27,6 @@ Route::middleware([SharedAccess::class, 'auth'])->group(function () {
         Route::get('/workspace', 'data');
         Route::post('/projects', 'project');
         Route::put('/projects/{project}/goal', 'goal');
-        Route::post('/projects/{project}/members', 'member');
         Route::post('/projects/{project}/stages', 'stage');
         Route::put('/projects/{project}/stages/{kind}/order', 'order')->whereIn('kind', ['product', 'member']);
         Route::match(['put', 'delete'], '/projects/{project}/stages/{kind}/{id}', 'updateStage')->whereIn('kind', ['product', 'member']);
@@ -43,7 +42,8 @@ Route::middleware([SharedAccess::class, 'auth'])->group(function () {
         Route::match(['put', 'delete'], '/comments/{comment}', 'editComment');
         Route::post('/tasks/{task}/attachments', 'upload');
         Route::delete('/attachments/{attachment}', 'removeAttachment');
-        Route::post('/notices/read', 'notices');
+        Route::post('/notifications/read', 'notifications');
+        Route::post('/notifications/{notification}/read', 'notifications');
         Route::put('/settings', 'settings');
         Route::post('/settings/avatar', 'uploadAvatar');
         Route::delete('/settings/avatar', 'removeAvatar');

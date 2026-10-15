@@ -12,7 +12,7 @@ class WorkspaceTest extends WorkspaceCase
             $this->get($route)->assertOk()->assertSee('dir="rtl"', false)->assertSee('lang="fa"', false);
         }
         $this->get('/projects')->assertRedirect('/dashboard');
-        $this->getJson('/api/workspace')->assertJsonCount(0, 'projects')->assertJsonCount(0, 'tasks')->assertJsonCount(0, 'labels')->assertJsonCount(0, 'notices');
+        $this->getJson('/api/workspace')->assertJsonCount(0, 'projects')->assertJsonCount(0, 'tasks')->assertJsonCount(0, 'labels')->assertJsonCount(0, 'notifications');
     }
 
     public function test_settings_have_name_and_job_title_without_personal_credentials(): void
