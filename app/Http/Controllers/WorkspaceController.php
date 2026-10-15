@@ -9,6 +9,7 @@ use App\Models\Member;
 use App\Models\Notice;
 use App\Models\Project;
 use App\Models\Task;
+use App\Models\TaskActivity;
 use App\Services\ProjectAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,11 @@ class WorkspaceController extends Controller
         $ids = Project::pluck('id');
 
         return Label::where(fn ($q) => $q->whereIn('project_id', $ids)->orWhere(fn ($q) => $q->whereNull('project_id')->where('member_id', $r->user()->id)));
+    }
+
+    private function activity(Task $task, Member $member, string $type, ?string $old = null, ?string $new = null): void
+    {
+        TaskActivity::create(['task_id' => $task->id, 'member_id' => $member->id, 'type' => $type, 'old_value' => $old, 'new_value' => $new]);
     }
 
     public function data(Request $r)
@@ -77,7 +83,8 @@ class WorkspaceController extends Controller
         if ($r->isMethod('delete')) {
             if ($kind !== 'member' && $stage->tasks()->exists()) {
                 throw ValidationException::withMessages(['stage' => 'قبل از حذف، تسک‌های این مرحله را منتقل کنید.']);
-            }$stage->delete();
+            }
+            $stage->delete();
 
             return response()->noContent();
         }
@@ -117,7 +124,7 @@ class WorkspaceController extends Controller
     {
         ProjectAccess::check($task->project);
 
-        return $task->load(['subtasks', 'labels', 'members', 'comments.user', 'attachments.user']);
+        return $task->load(['subtasks', 'labels', 'members', 'comments.user', 'attachments.user', 'activities.member']);
     }
 
     public function saveTask(Request $r, ?Task $task = null)
@@ -125,12 +132,17 @@ class WorkspaceController extends Controller
         $project = $task?->project ?? Project::findOrFail($r->input('project_id'));
         ProjectAccess::check($project, 'write');
         $v = $r->validate(['title' => 'required|string|max:200', 'description' => 'nullable|string|max:10000', 'product_stage_id' => ['required', 'integer', Rule::exists('product_stages', 'id')->where('project_id', $project->id)], 'member_stage_id' => ['nullable', 'integer', Rule::exists('member_stages', 'id')->where('project_id', $project->id)], 'owner_id' => ['required', 'integer', Rule::exists('project_members', 'member_id')->where('project_id', $project->id)], 'start_date' => 'required|date_format:Y-m-d', 'due_date' => 'required|date_format:Y-m-d|after_or_equal:start_date', 'completed' => 'boolean', 'members' => 'present|array|max:100', 'members.*' => ['integer', 'distinct', Rule::exists('project_members', 'member_id')->where('project_id', $project->id)], 'labels' => 'present|array|max:30', 'labels.*' => 'integer|distinct', 'subtasks' => 'present|array|max:100', 'subtasks.*.id' => 'nullable|integer|distinct', 'subtasks.*.title' => 'required|string|max:200', 'subtasks.*.completed' => 'required|boolean']);
-        $validLabels = $this->visibleLabels($r)->where(fn ($q) => $q->whereNull('project_id')->orWhere('project_id', $project->id))->pluck('id');
+        $validLabels = Label::where('project_id', $project->id)->pluck('id');
         if (collect($v['labels'])->diff($validLabels)->isNotEmpty()) {
             throw ValidationException::withMessages(['labels' => 'برچسب انتخاب‌شده متعلق به این پروژه نیست.']);
         }
+
         $new = ! $task;
         $oldAssignee = $task?->owner_id;
+        $before = $task ? $task->only(['title', 'start_date', 'due_date', 'product_stage_id', 'owner_id', 'completed_at']) : [];
+        $oldStage = $task?->stage?->title;
+        $oldOwner = $task?->assignee?->name;
+
         $task = DB::transaction(function () use ($v, $project, $task, $r) {
             $fields = collect($v)->except(['members', 'labels', 'subtasks', 'completed'])->all();
             $fields['completed_at'] = ($v['completed'] ?? false) ? ($task?->completed_at ?? now()) : null;
@@ -149,23 +161,54 @@ class WorkspaceController extends Controller
                     $sub->update($fields);
                 } else {
                     $sub = $task->subtasks()->create($fields);
-                }$keep[] = $sub->id;
-            }$task->subtasks()->whereNotIn('id', $keep)->delete();
+                }
+                $keep[] = $sub->id;
+            }
+            $task->subtasks()->whereNotIn('id', $keep)->delete();
 
-            return $task;
+            return $task->fresh(['stage', 'assignee']);
         });
+
+        if ($new) {
+            $this->activity($task, $r->user(), 'created', null, $task->title);
+        } else {
+            if ($before['title'] !== $task->title) {
+                $this->activity($task, $r->user(), 'title', $before['title'], $task->title);
+            }
+            foreach (['start_date', 'due_date'] as $field) {
+                if ((string) $before[$field] !== (string) $task->$field) {
+                    $this->activity($task, $r->user(), $field, (string) $before[$field], (string) $task->$field);
+                }
+            }
+            if ((int) $before['product_stage_id'] !== (int) $task->product_stage_id) {
+                $this->activity($task, $r->user(), 'stage', $oldStage, $task->stage?->title);
+            }
+            if ((int) $before['owner_id'] !== (int) $task->owner_id) {
+                $this->activity($task, $r->user(), 'assignee', $oldOwner, $task->assignee?->name);
+            }
+            $wasCompleted = ! empty($before['completed_at']);
+            $isCompleted = ! empty($task->completed_at);
+            if ($wasCompleted !== $isCompleted) {
+                $this->activity($task, $r->user(), $isCompleted ? 'completed' : 'reopened');
+            }
+        }
+
         if ($task->owner_id && $task->owner_id !== $r->user()->id) {
             Notice::create(['member_id' => $task->owner_id, 'task_id' => $task->id, 'type' => ($new || $oldAssignee !== $task->owner_id ? 'assigned' : 'edited'), 'body' => ($new || $oldAssignee !== $task->owner_id ? 'تسک جدید برای شما: ' : 'تسک به‌روزرسانی شد: ').$task->title]);
         }
 
-        return response()->json($task->load(['subtasks', 'labels', 'members']), $new ? 201 : 200);
+        return response()->json($task->load(['subtasks', 'labels', 'members', 'activities.member']), $new ? 201 : 200);
     }
 
     public function complete(Request $r, Task $task)
     {
         ProjectAccess::check($task->project, 'write');
         $v = $r->validate(['completed' => 'required|boolean']);
+        $wasCompleted = (bool) $task->completed_at;
         $task->update(['completed_at' => $v['completed'] ? now() : null]);
+        if ($wasCompleted !== (bool) $task->completed_at) {
+            $this->activity($task, $r->user(), $task->completed_at ? 'completed' : 'reopened');
+        }
 
         return $task;
     }
@@ -175,7 +218,8 @@ class WorkspaceController extends Controller
         ProjectAccess::check($task->project, 'write');
         foreach ($task->attachments as $a) {
             Storage::disk('local')->delete($a->path);
-        }$task->delete();
+        }
+        $task->delete();
 
         return response()->noContent();
     }
@@ -186,7 +230,7 @@ class WorkspaceController extends Controller
             if ($label->project_id) {
                 ProjectAccess::check($label->project, 'write');
             } else {
-                abort_unless($label->created_by === $r->user()->id, 404);
+                abort_unless($label->member_id === $r->user()->id, 404);
             }
         }
         if ($r->isMethod('delete')) {
@@ -202,7 +246,7 @@ class WorkspaceController extends Controller
             unset($v['project_id']);
             $label->update($v);
         } else {
-            $label = Label::create([...$v, 'created_by' => $r->user()->id]);
+            $label = Label::create([...$v, 'member_id' => $r->user()->id]);
         }
 
         return $label;
@@ -228,7 +272,8 @@ class WorkspaceController extends Controller
             $comment->delete();
 
             return response()->noContent();
-        }$comment->update($r->validate(['body' => 'required|string|max:5000']));
+        }
+        $comment->update($r->validate(['body' => 'required|string|max:5000']));
 
         return $comment;
     }
@@ -240,7 +285,7 @@ class WorkspaceController extends Controller
         $f = $r->file('file');
         $path = $f->store('attachments', 'local');
 
-        return response()->json($task->attachments()->create(['member_id' => $r->user()->id, 'original_name' => mb_substr(basename($f->getClientOriginalName()), 0, 200), 'file_name' => basename($path), 'mime_type' => $f->getMimeType(), 'size' => $f->getSize(), 'path' => $path])->load('user'), 201);
+        return response()->json($task->attachments()->create(['member_id' => $r->user()->id, 'original_name' => mb_substr(basename($f->getClientOriginalName()), 0, 200), 'file_name' => basename($path), 'mime' => $f->getMimeType(), 'size' => $f->getSize(), 'path' => $path])->load('user'), 201);
     }
 
     public function download(Attachment $attachment)
@@ -272,6 +317,57 @@ class WorkspaceController extends Controller
         $v = $r->validate(['name' => ['required', 'string', 'max:100', Rule::unique('members')->ignore($r->user()->id)], 'job_title' => 'required|string|max:100']);
         $r->user()->update($v);
 
-        return $r->user();
+        return $r->user()->fresh();
+    }
+
+    public function uploadAvatar(Request $r)
+    {
+        $r->validate(['avatar' => 'required|file|max:2048|mimes:jpg,jpeg,png,webp|extensions:jpg,jpeg,png,webp']);
+        abort_unless(extension_loaded('gd'), 500, 'پردازش تصویر روی سرور فعال نیست.');
+        $bytes = file_get_contents($r->file('avatar')->getRealPath());
+        $source = @imagecreatefromstring($bytes);
+        abort_unless($source, 422, 'تصویر قابل پردازش نیست.');
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $side = min($width, $height);
+        $srcX = (int) floor(($width - $side) / 2);
+        $srcY = (int) floor(($height - $side) / 2);
+        $target = imagecreatetruecolor(512, 512);
+        imagealphablending($target, true);
+        imagesavealpha($target, true);
+        imagecopyresampled($target, $source, 0, 0, $srcX, $srcY, 512, 512, $side, $side);
+        ob_start();
+        imagewebp($target, null, 85);
+        $output = ob_get_clean();
+        imagedestroy($source);
+        imagedestroy($target);
+
+        $member = $r->user();
+        if ($member->avatar_path) {
+            Storage::disk('local')->delete($member->avatar_path);
+        }
+        $path = 'avatars/'.$member->id.'-'.bin2hex(random_bytes(8)).'.webp';
+        Storage::disk('local')->put($path, $output);
+        $member->update(['avatar_path' => $path]);
+
+        return $member->fresh();
+    }
+
+    public function removeAvatar(Request $r)
+    {
+        $member = $r->user();
+        if ($member->avatar_path) {
+            Storage::disk('local')->delete($member->avatar_path);
+            $member->update(['avatar_path' => null]);
+        }
+
+        return $member->fresh();
+    }
+
+    public function avatar(Member $member)
+    {
+        abort_unless($member->avatar_path && Storage::disk('local')->exists($member->avatar_path), 404);
+
+        return response()->file(Storage::disk('local')->path($member->avatar_path), ['Content-Type' => 'image/webp', 'Cache-Control' => 'private, max-age=3600', 'X-Content-Type-Options' => 'nosniff']);
     }
 }

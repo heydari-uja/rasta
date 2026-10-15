@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 @import "@fontsource/vazirmatn/400.css";
 @import "@fontsource/vazirmatn/500.css";
 @import "@fontsource/vazirmatn/600.css";
@@ -3339,7 +3340,7 @@ fieldset {
     font-size: 13px;
 }
 :root {
-    --muted: #737b6b;
+    --muted: #6f7867;
 }
 .project-card > p,
 .project-metrics,
@@ -3348,11 +3349,11 @@ fieldset {
 .stage-completed,
 .page-heading p,
 .section-heading p {
-    color: #7b876e;
+    color: #6f7867;
 }
 .project-card-bottom > span,
 .project-progress-label {
-    color: #7b876e;
+    color: #6f7867;
 }
 .task-card .task-date.overdue {
     color: #b5664c;
@@ -3404,3 +3405,277 @@ fieldset {
 
 .profile-menu{display:flex;gap:20px;padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 @media(max-width:768px){.stats-grid,.project-grid,.team-grid,.labels-grid,.dashboard-bottom,.form-grid{grid-template-columns:1fr}.board{display:flex;flex-direction:column;overflow:visible}.board-column{width:100%;min-width:0}.gate-card{padding:24px}}
+
+/* Requested workspace refinements */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #c5c8c1 transparent;
+}
+*::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+    background: #c5c8c1;
+    border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: #9fa49b;
+}
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+}
+.sidebar {
+    position: sticky;
+    inset: auto;
+    top: 0;
+    height: 100vh;
+    flex: 0 0 244px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.main-shell {
+    margin-inline-start: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.sidebar-projects {
+    min-height: 0;
+    overflow-y: auto;
+}
+.sidebar-bottom {
+    margin-block-start: auto;
+}
+.avatar {
+    overflow: hidden;
+    padding: 0;
+    background: var(--surface);
+}
+.avatar > img,
+.avatar > span {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    object-fit: cover;
+    border-radius: inherit;
+}
+.top-avatar {
+    padding: 0;
+}
+.calendar-fixed {
+    position: fixed !important;
+    inset: auto !important;
+    z-index: 120;
+}
+.task-history {
+    border-block-start: 1px solid var(--border);
+    margin-block-start: 22px;
+    padding-block-start: 18px;
+}
+.activity-row {
+    display: flex;
+    gap: 10px;
+    padding: 9px 2px;
+    color: var(--ink);
+}
+.activity-row + .activity-row {
+    border-block-start: 1px solid var(--border);
+}
+.activity-row p {
+    font-size: 12px;
+}
+.activity-row small {
+    color: var(--muted);
+}
+.activity-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-block-start: 9px;
+    flex: 0 0 7px;
+}
+.avatar-settings,
+.theme-settings {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 18px 0;
+    border-block-end: 1px solid var(--border);
+}
+.avatar-settings p,
+.theme-settings p {
+    color: var(--muted);
+    font-size: 11px;
+}
+.theme-options {
+    flex-shrink: 0;
+}
+
+.dark {
+    --bg: #151715;
+    --surface: #20231f;
+    --ink: #f2f3ef;
+    --muted: #b8bcb3;
+    --border: #41463f;
+    --accent: #d9693a;
+    --accent-hover: #e47b4d;
+    --accent-soft: #3b2820;
+    --green: #82ad9b;
+    color-scheme: dark;
+}
+.dark * {
+    scrollbar-color: #5b6159 transparent;
+}
+.dark *::-webkit-scrollbar-thumb {
+    background: #5b6159;
+}
+.dark *::-webkit-scrollbar-thumb:hover {
+    background: #747b71;
+}
+.dark body,
+.dark .main-shell,
+.dark .content,
+.dark .gate-page {
+    background: var(--bg);
+    color: var(--ink);
+}
+.dark .sidebar,
+.dark .topbar {
+    background: #1a1d1a;
+    border-color: var(--border);
+}
+.dark :where(.panel,.stat-card,.project-card,.new-project-card,.goal-card,.board-column,.team-card,.task-card,.label-card,.settings-panel,.modal-panel,.confirm-dialog,.notification-panel,.dropdown-menu,.profile-menu,.gate-card,.search-results,.inline-form,.helper-box,.wizard-stage,.upload-zone,.attachment-row,.comment,.profile-choice) {
+    background: var(--surface);
+    color: var(--ink);
+    border-color: var(--border);
+}
+.dark :where(input,textarea,select,.date-trigger,.compact-select) {
+    background: #171a17;
+    color: #f4f5f1;
+    border-color: #555b53;
+}
+.dark :where(input,textarea)::placeholder {
+    color: #949a91;
+}
+.dark .calendar-pop {
+    background: #20231f;
+    border-color: #555b53;
+    box-shadow: 0 12px 36px #0008;
+}
+.dark .calendar-grid button:hover,
+.dark .icon-btn:hover,
+.dark .project-shortcut:hover,
+.dark .notification-panel button:hover,
+.dark .profile-choice:hover {
+    background: #2b2f2a;
+}
+.dark .calendar-grid .muted {
+    color: #777e74;
+}
+.dark :where(.button,.segmented,.view-switch) {
+    background: #262a25;
+    color: #f1f2ef;
+    border-color: #50564e;
+}
+.dark .button:hover {
+    background: #30352f;
+}
+.button.primary,
+.dark .button.primary,
+.calendar-grid .selected,
+.dark .calendar-grid .selected {
+    background: #d9693a !important;
+    color: #24130c !important;
+    border-color: #d9693a !important;
+}
+.dark .sidebar nav a {
+    color: #c5c9c1;
+}
+.dark .sidebar nav a:hover,
+.dark .sidebar nav a.active {
+    background: #33251f;
+    color: #f0b08f;
+}
+.dark :where(.muted,.eyebrow,.page-heading p,.section-heading p,.stage-meta,.stage-completed,.project-card > p,.project-card-bottom > span,.project-progress-label,.project-metrics,.task-date,.notification-panel small) {
+    color: var(--muted);
+}
+.dark .notification-panel .unread {
+    background: #35271f;
+}
+.dark .tag {
+    background: color-mix(in srgb, var(--tag-color) 24%, #20231f);
+    color: color-mix(in srgb, var(--tag-color) 45%, white);
+}
+.dark .progress-track,
+.dark .mini-progress {
+    background: #353a34;
+}
+.dark .modal-backdrop,
+.dark .confirm-backdrop {
+    background: #080a08b8;
+}
+.dark .settings-note,
+.dark .tip-card {
+    background: #252a24;
+    border-color: var(--border);
+    color: #d1d5cc;
+}
+.dark .danger-text {
+    color: #ff9f9f !important;
+}
+.dark .field-error,
+.dark .error-banner {
+    color: #ffb2b2;
+}
+.dark .status-badge {
+    background: #302d23;
+    color: #e2d29c;
+}
+.dark .status-badge.finished {
+    background: #203229;
+    color: #9ed1b2;
+}
+.dark .gate-page {
+    background: #151715;
+}
+.dark .gate-card {
+    box-shadow: 0 18px 55px #0005;
+}
+@media (max-width: 768px) {
+    .app-shell {
+        display: block;
+    }
+    .sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        height: 100dvh;
+        inset-inline-start: 0;
+        transform: translateX(100%);
+        flex: none;
+    }
+    .sidebar.is-open {
+        transform: translateX(0);
+    }
+    .main-shell {
+        width: 100%;
+    }
+    .avatar-settings,
+    .theme-settings {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
+/* AA text contrast refinements */
+.accent,.text-button:hover,.add-column-task:hover,.wizard-steps .current,.auth-link a,.active .nav-count{color:#a54720}
+.dark :where(.accent,.text-button:hover,.add-column-task:hover,.wizard-steps .current,.auth-link a,.active .nav-count){color:#f09a70}

@@ -52,4 +52,9 @@ class Task extends Model
     {
         return $this->hasMany(Attachment::class);
     }
+
+    public function activities()
+    {
+        return $this->hasMany(TaskActivity::class)->latest('created_at');
+    }
 }

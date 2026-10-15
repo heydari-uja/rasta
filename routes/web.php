@@ -12,6 +12,7 @@ Route::middleware(SharedAccess::class)->group(function () {
     Route::get('/profiles', [AuthController::class, 'profiles']);
     Route::post('/profiles', [AuthController::class, 'select'])->middleware('throttle:20,1');
     Route::post('/profile/switch', [AuthController::class, 'switch']);
+    Route::get('/avatars/{member}', [WorkspaceController::class, 'avatar'])->name('avatar');
 });
 Route::middleware([SharedAccess::class, 'auth'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -42,5 +43,7 @@ Route::middleware([SharedAccess::class, 'auth'])->group(function () {
         Route::delete('/attachments/{attachment}', 'removeAttachment');
         Route::post('/notices/read', 'notices');
         Route::put('/settings', 'settings');
+        Route::post('/settings/avatar', 'uploadAvatar');
+        Route::delete('/settings/avatar', 'removeAvatar');
     });
 });

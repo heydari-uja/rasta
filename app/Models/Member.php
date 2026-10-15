@@ -10,9 +10,16 @@ class Member extends Authenticatable
 
     protected $guarded = ['id'];
 
-    protected $hidden = ['remember_token'];
+    protected $hidden = ['remember_token', 'avatar_path'];
 
     protected $casts = ['active' => 'boolean'];
+
+    protected $appends = ['avatar_url'];
+
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->avatar_path ? route('avatar', ['member' => $this->id]) : null;
+    }
 
     public function projects()
     {

@@ -25,4 +25,18 @@ class WorkspaceTest extends WorkspaceCase
         $this->postJson('/api/tasks', $this->taskPayload($p))->assertCreated();
         $this->getJson('/api/workspace')->assertOk()->assertJsonPath('tasks.0.owner_id', $this->member->id)->assertJsonPath('tasks.0.assignee.name', $this->member->name)->assertJsonCount(2, 'projects.0.stages');
     }
+
+    public function test_theme_is_class_based_and_defaults_to_system_storage_preference(): void
+    {
+        $this->get('/settings')->assertOk()
+            ->assertSee("localStorage.getItem('rasta-theme')||'system'", false)
+            ->assertSee("classList.toggle('dark'", false)
+            ->assertSee('سیستم')
+            ->assertSee('روشن')
+            ->assertSee('تاریک');
+
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('@custom-variant dark', $css);
+        $this->assertStringContainsString('.dark {', $css);
+    }
 }

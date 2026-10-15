@@ -27,6 +27,7 @@ import {
     GripVertical,
     Paperclip,
     MessageCircle,
+    History,
     Trash2,
     Pencil,
     Target,
@@ -67,6 +68,7 @@ const icons = {
     GripVertical,
     Paperclip,
     MessageCircle,
+    History,
     Trash2,
     Pencil,
     Target,
@@ -88,13 +90,22 @@ const today = () =>
         month: "2-digit",
         day: "2-digit",
     }).format(new Date());
+const cleanPersianDate = (value) => value.replace(/[،,]/g, " ").replace(/\s+/g, " ").trim();
 const date = (d) =>
     d
-        ? new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+        ? cleanPersianDate(new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+              weekday: "long",
               day: "numeric",
               month: "long",
-          }).format(new Date(d + "T12:00:00"))
+              year: "numeric",
+          }).format(new Date(d + "T12:00:00")))
         : "بدون تاریخ";
+const commentTime = (d) => cleanPersianDate(new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+}).format(new Date(d)));
 const clone = (x) => JSON.parse(JSON.stringify(x));
 Alpine.magic(
     "icon",
@@ -112,6 +123,7 @@ Alpine.data("datePicker", () => ({
     cursor: new Date(),
     days: [],
     heading: "",
+    calendarStyle: "",
     init() {
         this.$watch("value", () => {
             if (this.value) this.cursor = new Date(this.value + "T12:00:00");
@@ -135,10 +147,10 @@ Alpine.data("datePicker", () => ({
         const start = new Date(this.cursor);
         start.setDate(start.getDate() - this.parts(start).day + 1);
         this.cursor = start;
-        this.heading = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+        this.heading = cleanPersianDate(new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
             month: "long",
             year: "numeric",
-        }).format(start);
+        }).format(start));
         const offset = (start.getDay() + 1) % 7;
         this.days = Array.from({ length: 42 }, (_, i) => {
             const d = new Date(start);
@@ -154,6 +166,15 @@ Alpine.data("datePicker", () => ({
                 muted: this.parts(d).month !== this.parts(start).month,
             };
         });
+    },
+    position() {
+        const rect = this.$refs.trigger?.getBoundingClientRect();
+        if (!rect) return;
+        const width = Math.min(270, window.innerWidth - 24);
+        const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width));
+        const below = rect.bottom + 8;
+        const top = below + 330 < window.innerHeight ? below : Math.max(12, rect.top - 330);
+        this.calendarStyle = `position:fixed;top:${top}px;left:${left}px;width:${width}px`;
     },
     move(n) {
         const d = new Date(this.cursor);
@@ -210,7 +231,12 @@ Alpine.data("workspace", () => ({
     dragStage: null,
     teamDrag: null,
     account: {},
+    theme: localStorage.getItem("rasta-theme") || "system",
     async init() {
+        this.applyTheme();
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+            if (this.theme === "system") this.applyTheme();
+        });
         await this.refresh();
         this.route();
         window.addEventListener("popstate", () => this.route());
@@ -223,10 +249,7 @@ Alpine.data("workspace", () => ({
                     this.notificationsOpen = false;
                 }
             }
-            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-                e.preventDefault();
-                this.$refs.search.focus();
-            }
+
         });
         window.addEventListener("beforeunload", (e) => {
             if (this.isDirty()) {
@@ -298,13 +321,44 @@ Alpine.data("workspace", () => ({
     date,
     today,
     fullDate() {
-        return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+        return cleanPersianDate(new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
             weekday: "long",
             day: "numeric",
             month: "long",
             year: "numeric",
             timeZone: "Asia/Tehran",
-        }).format(new Date());
+        }).format(new Date()));
+    },
+    commentTime,
+    relativeTime(value) {
+        const diff = new Date(value).getTime() - Date.now();
+        const abs = Math.abs(diff);
+        const rtf = new Intl.RelativeTimeFormat("fa-IR", { numeric: "auto" });
+        if (abs < 60 * 60 * 1000) return rtf.format(Math.round(diff / 60000), "minute");
+        if (abs < 24 * 60 * 60 * 1000) return rtf.format(Math.round(diff / 3600000), "hour");
+        return rtf.format(Math.round(diff / 86400000), "day");
+    },
+    activityText(a) {
+        const name = a.member?.name || "یک عضو";
+        if (a.type === "created") return `${name} تسک را ساخت`;
+        if (a.type === "title") return `${name} عنوان را از «${a.old_value}» به «${a.new_value}» تغییر داد`;
+        if (a.type === "start_date") return `${name} تاریخ شروع را از ${date(a.old_value)} به ${date(a.new_value)} تغییر داد`;
+        if (a.type === "due_date") return `${name} سررسید را از ${date(a.old_value)} به ${date(a.new_value)} تغییر داد`;
+        if (a.type === "stage") return `${name} مرحله را از «${a.old_value || "بدون مرحله"}» به «${a.new_value || "بدون مرحله"}» تغییر داد`;
+        if (a.type === "assignee") return `${name} مسئول را از «${a.old_value || "بدون مسئول"}» به «${a.new_value || "بدون مسئول"}» تغییر داد`;
+        if (a.type === "completed") return `${name} تسک را تکمیل کرد`;
+        if (a.type === "reopened") return `${name} تسک را دوباره باز کرد`;
+        return `${name} تسک را تغییر داد`;
+    },
+    applyTheme() {
+        const dark = this.theme === "dark" || (this.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.dataset.theme = this.theme;
+    },
+    setTheme(theme) {
+        this.theme = theme;
+        localStorage.setItem("rasta-theme", theme);
+        this.applyTheme();
     },
     get currentProject() {
         return this.projects.find((p) => p.id === this.projectId);
@@ -543,6 +597,7 @@ Alpine.data("workspace", () => ({
                   completed: false,
                   comments: [],
                   attachments: [],
+                  activities: [],
               };
         this.showModal("task");
     },
@@ -551,9 +606,7 @@ Alpine.data("workspace", () => ({
     },
     get formLabels() {
         return this.labels.filter(
-            (l) =>
-                (!l.project_id || l.project_id == this.taskForm.project_id) &&
-                l.name.includes(this.labelQuery),
+            (l) => l.project_id == this.taskForm.project_id && l.name.includes(this.labelQuery),
         );
     },
     async saveTask() {
@@ -993,7 +1046,38 @@ Alpine.data("workspace", () => ({
             this.busy = false;
         }
     },
-    async saveSettings() {
+    async uploadAvatar(file) {
+        if (!file) return;
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+            return this.notify("عکس باید JPG، PNG یا WebP و حداکثر ۲ مگابایت باشد.", true);
+        }
+        this.busy = true;
+        try {
+            const data = new FormData();
+            data.append("avatar", file);
+            this.user = await this.api("/settings/avatar", "POST", data);
+            const index = this.members.findIndex((m) => m.id === this.user.id);
+            if (index >= 0) this.members[index] = this.user;
+            this.notify("عکس پروفایل ذخیره شد.");
+        } catch (e) {
+            this.fail(e);
+        } finally {
+            this.busy = false;
+        }
+    },
+    async removeAvatar() {
+        this.busy = true;
+        try {
+            this.user = await this.api("/settings/avatar", "DELETE");
+            const index = this.members.findIndex((m) => m.id === this.user.id);
+            if (index >= 0) this.members[index] = this.user;
+            this.notify("عکس پروفایل حذف شد.");
+        } catch (e) {
+            this.fail(e);
+        } finally {
+            this.busy = false;
+        }
+    },    async saveSettings() {
         this.busy = true;
         try {
             await this.api("/settings", "PUT", this.account);
