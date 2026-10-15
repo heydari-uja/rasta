@@ -312,7 +312,7 @@ Alpine.data("workspace", () => ({
     get myTasks() {
         return this.tasks.filter(
             (t) =>
-                t.assigned_to === this.user.id ||
+                t.owner_id === this.user.id ||
                 t.members.some((m) => m.id === this.user.id),
         );
     },
@@ -387,14 +387,14 @@ Alpine.data("workspace", () => ({
     stageTasks(id, mine = false) {
         return (mine ? this.myTasks : this.tasks).filter(
             (t) =>
-                t.stage_id === id &&
+                t.product_stage_id === id &&
                 (this.taskFilter === "all" ||
                     (this.taskFilter === "done" && t.completed_at) ||
                     (this.taskFilter === "active" && !t.completed_at)),
         );
     },
     stageProgress(id) {
-        const ts = this.tasks.filter((t) => t.stage_id === id);
+        const ts = this.tasks.filter((t) => t.product_stage_id === id);
         return ts.length
             ? Math.round(
                   (ts.filter((t) => t.completed_at).length / ts.length) * 100,
@@ -402,10 +402,10 @@ Alpine.data("workspace", () => ({
             : 0;
     },
     stageTotal(id) {
-        return this.tasks.filter((t) => t.stage_id === id).length;
+        return this.tasks.filter((t) => t.product_stage_id === id).length;
     },
     stageDone(id) {
-        return this.tasks.filter((t) => t.stage_id === id && t.completed_at)
+        return this.tasks.filter((t) => t.product_stage_id === id && t.completed_at)
             .length;
     },
     subProgress(t) {
@@ -431,7 +431,7 @@ Alpine.data("workspace", () => ({
         this.notify(e.message || "ذخیره انجام نشد. دوباره تلاش کنید.", true);
     },
     err(k) {
-        return this.errors[k]?.[0] || "";
+        return (this.errors[k]?.[0] || "").replace(/[0-9]/g,d=>"۰۱۲۳۴۵۶۷۸۹"[d]);
     },
     showModal(name) {
         this.errors = {};
@@ -532,9 +532,9 @@ Alpine.data("workspace", () => ({
                   project_id: p.id,
                   title: "",
                   description: "",
-                  stage_id: stage?.id || p.stages[0]?.id || "",
+                  product_stage_id: stage?.id || p.stages[0]?.id || "",
                   member_stage_id: null,
-                  assigned_to: this.user.id,
+                  owner_id: this.user.id,
                   members: [],
                   labels: [],
                   start_date: today(),
@@ -652,7 +652,7 @@ Alpine.data("workspace", () => ({
                 this.inlineStageForm,
             );
             await this.refresh();
-            this.taskForm.stage_id = s.id;
+            this.taskForm.product_stage_id = s.id;
             this.inlineStage = false;
             this.notify("مرحله ساخته و انتخاب شد.");
         } catch (e) {
@@ -760,9 +760,9 @@ Alpine.data("workspace", () => ({
             goal: {
                 title: "",
                 description: "",
-                success_criteria: "",
+                success_criterion: "",
                 start_date: today(),
-                end_date: today(),
+                target_date: today(),
             },
             stages: [],
         };
@@ -777,17 +777,17 @@ Alpine.data("workspace", () => ({
         if (this.projectStep === 2) {
             for (const key of [
                 "title",
-                "success_criteria",
+                "success_criterion",
                 "start_date",
-                "end_date",
+                "target_date",
             ])
                 if (!this.projectForm.goal[key])
                     this.errors["goal." + key] = ["این فیلد الزامی است."];
             if (
-                this.projectForm.goal.end_date <
+                this.projectForm.goal.target_date <
                 this.projectForm.goal.start_date
             )
-                this.errors["goal.end_date"] = [
+                this.errors["goal.target_date"] = [
                     "تاریخ پایان باید بعد از شروع باشد.",
                 ];
             if (Object.keys(this.errors).length) return;
@@ -832,7 +832,7 @@ Alpine.data("workspace", () => ({
                   title: "",
                   description: "",
                   start_date: this.currentProject?.goal.start_date || today(),
-                  end_date: this.currentProject?.goal.end_date || today(),
+                  end_date: this.currentProject?.goal.target_date || today(),
               };
         if (user) this.stageForm.member_id = user.id;
         this.showModal("stage");

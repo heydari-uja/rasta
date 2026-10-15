@@ -2,17 +2,18 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Middleware\SharedAccess;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect('/dashboard'));
 Route::view('/login', 'auth')->name('login');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
-Route::middleware(App\Http\Middleware\SharedAccess::class)->group(function () {
- Route::get('/profiles', [AuthController::class, 'profiles']);
- Route::post('/profiles', [AuthController::class, 'select'])->middleware('throttle:20,1');
- Route::post('/profile/switch', [AuthController::class, 'switch']);
+Route::middleware(SharedAccess::class)->group(function () {
+    Route::get('/profiles', [AuthController::class, 'profiles']);
+    Route::post('/profiles', [AuthController::class, 'select'])->middleware('throttle:20,1');
+    Route::post('/profile/switch', [AuthController::class, 'switch']);
 });
-Route::middleware([App\Http\Middleware\SharedAccess::class, 'auth'])->group(function () {
+Route::middleware([SharedAccess::class, 'auth'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     foreach (['/dashboard', '/projects', '/projects/{project}', '/projects/{project}/goal', '/projects/{project}/stages', '/projects/{project}/members', '/tasks', '/tasks/{task}', '/labels', '/settings'] as $path) {
         Route::get($path, function () {
@@ -39,7 +40,7 @@ Route::middleware([App\Http\Middleware\SharedAccess::class, 'auth'])->group(func
         Route::match(['put', 'delete'], '/comments/{comment}', 'editComment');
         Route::post('/tasks/{task}/attachments', 'upload');
         Route::delete('/attachments/{attachment}', 'removeAttachment');
-        Route::post('/notices/read','notices');
-        Route::put('/settings','settings');
+        Route::post('/notices/read', 'notices');
+        Route::put('/settings', 'settings');
     });
 });

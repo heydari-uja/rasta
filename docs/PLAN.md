@@ -19,3 +19,6 @@ Blade + Alpine + Tailwind/Vite؛ پوسته فارسی RTL با سایدبار �
 7. موبایل، حالت‌ها و پرداخت بصری؛ تست مرورگر در ۱۴۴۰ و ۳۹۰ پیکسل، test، pint --test و npm run build.
 
 پس از هر مرحله تست‌ها اجرا و خطاها پیش از مرحله بعد اصلاح می‌شوند. در پایان بررسی اسرار، کامیت‌های روشن، ساخت مخزن خصوصی rasta در صورت دسترسی GitHub، push شاخه main و ZIP بدون وابستگی‌ها/اسرار. ساخت pipeline خارج از محدوده است.
+
+## نگاشت نهایی مدل‌ها
+نام ستون‌های پایگاه داده مطابق سند است: tasks.product_stage_id و owner_id، goals.success_criterion و target_date، نام مراحل در name، labels.member_id و attachments.mime. برای بازاستفاده اجزای فرم، API مراحل alias عنوان title و API برچسب alias created_by و پیوست alias mime_type دارد؛ این‌ها ستون جداگانه یا داده تکراری نیستند.

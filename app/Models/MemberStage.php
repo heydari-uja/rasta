@@ -8,6 +8,18 @@ class MemberStage extends Model
 {
     protected $guarded = ['id'];
 
+    protected $appends = ['title'];
+
+    public function getTitleAttribute(): string
+    {
+        return $this->attributes['name'];
+    }
+
+    public function setTitleAttribute(string $value): void
+    {
+        $this->attributes['name'] = $value;
+    }
+
     public function project()
     {
         return $this->belongsTo(Project::class);

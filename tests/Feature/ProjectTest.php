@@ -1,10 +1,52 @@
 <?php
+
 namespace Tests\Feature;
-use Tests\WorkspaceCase;
+
 use App\Models\Member;
-class ProjectTest extends WorkspaceCase {
- public function test_wizard_creates_one_goal_and_ordered_stages_atomically(): void { $p=$this->project();$this->assertDatabaseCount('projects',1);$this->assertDatabaseCount('goals',1);$this->assertSame([0,1],$p->stages->pluck('position')->all());$this->assertSame('#d29268',$p->color);$this->getJson('/api/workspace')->assertOk()->assertJsonPath('projects.0.tasks_count',0); }
- public function test_invalid_wizard_creates_nothing(): void { $v=$this->payload();$v['goal']['end_date']='2025-01-01';$this->postJson('/api/projects',$v)->assertUnprocessable()->assertJsonValidationErrors('goal.end_date');$this->assertDatabaseCount('projects',0);$this->assertDatabaseCount('goals',0); }
- public function test_failure_inside_transaction_rolls_back_project_and_goal(): void { \App\Models\ProductStage::creating(function(){throw new \RuntimeException('test rollback');});try{$this->postJson('/api/projects',$this->payload())->assertStatus(500);$this->assertDatabaseCount('projects',0);$this->assertDatabaseCount('goals',0);}finally{\App\Models\ProductStage::flushEventListeners();} }
- public function test_all_active_members_can_edit_goal_without_roles(): void { $p=$this->project();$other=Member::create(['name'=>'همکار','job_title'=>'توسعه']);$this->actingAs($other)->putJson('/api/projects/'.$p->id.'/goal',$this->payload()['goal'])->assertOk();$this->postJson('/api/projects/'.$p->id.'/members',['member_id'=>$other->id])->assertOk();$this->assertCount(2,$p->members); }
+use App\Models\ProductStage;
+use Tests\WorkspaceCase;
+
+class ProjectTest extends WorkspaceCase
+{
+    public function test_wizard_creates_one_goal_and_ordered_stages_atomically(): void
+    {
+        $p = $this->project();
+        $this->assertDatabaseCount('projects', 1);
+        $this->assertDatabaseCount('goals', 1);
+        $this->assertSame([0, 1], $p->stages->pluck('position')->all());
+        $this->assertSame('#d29268', $p->color);
+        $this->getJson('/api/workspace')->assertOk()->assertJsonPath('projects.0.tasks_count', 0);
+    }
+
+    public function test_invalid_wizard_creates_nothing(): void
+    {
+        $v = $this->payload();
+        $v['goal']['target_date'] = '2025-01-01';
+        $this->postJson('/api/projects', $v)->assertUnprocessable()->assertJsonValidationErrors('goal.target_date');
+        $this->assertDatabaseCount('projects', 0);
+        $this->assertDatabaseCount('goals', 0);
+    }
+
+    public function test_failure_inside_transaction_rolls_back_project_and_goal(): void
+    {
+        ProductStage::creating(function () {
+            throw new \RuntimeException('test rollback');
+        });
+        try {
+            $this->postJson('/api/projects', $this->payload())->assertStatus(500);
+            $this->assertDatabaseCount('projects', 0);
+            $this->assertDatabaseCount('goals', 0);
+        } finally {
+            ProductStage::flushEventListeners();
+        }
+    }
+
+    public function test_all_active_members_can_edit_goal_without_roles(): void
+    {
+        $p = $this->project();
+        $other = Member::create(['name' => 'همکار', 'job_title' => 'توسعه']);
+        $this->actingAs($other)->putJson('/api/projects/'.$p->id.'/goal', $this->payload()['goal'])->assertOk();
+        $this->postJson('/api/projects/'.$p->id.'/members', ['member_id' => $other->id])->assertOk();
+        $this->assertCount(2, $p->members);
+    }
 }
