@@ -23,6 +23,11 @@ class Task extends Model
         return $this->belongsTo(ProductStage::class, 'product_stage_id');
     }
 
+    public function memberStage()
+    {
+        return $this->belongsTo(MemberStage::class);
+    }
+
     public function assignee()
     {
         return $this->belongsTo(Member::class, 'owner_id');

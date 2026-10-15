@@ -25,8 +25,18 @@ class MemberStage extends Model
         return $this->belongsTo(Project::class);
     }
 
+    public function productStage()
+    {
+        return $this->belongsTo(ProductStage::class);
+    }
+
     public function user()
     {
         return $this->belongsTo(Member::class, 'member_id');
+    }
+
+    public function tasks()
+    {
+        return $this->hasMany(Task::class);
     }
 }

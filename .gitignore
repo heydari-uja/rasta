@@ -8,6 +8,7 @@
 /storage/**
 !/storage/**/
 !/storage/**/.gitignore
+!/storage/**/.gitkeep
 /bootstrap/cache/*
 !/bootstrap/cache/.gitignore
 /public/hot

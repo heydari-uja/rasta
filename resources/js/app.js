@@ -7,7 +7,6 @@ import {
     Tags,
     Settings,
     Plus,
-    Search,
     Bell,
     ChevronLeft,
     ChevronRight,
@@ -48,7 +47,6 @@ const icons = {
     Tags,
     Settings,
     Plus,
-    Search,
     Bell,
     ChevronLeft,
     ChevronRight,
@@ -198,8 +196,6 @@ Alpine.data("workspace", () => ({
     loading: true,
     loadError: "",
     sidebar: false,
-    query: "",
-    searchOpen: false,
     notificationsOpen: false,
     view: "board",
     taskFilter: "active",
@@ -224,12 +220,16 @@ Alpine.data("workspace", () => ({
     stageKind: "product",
     stageId: null,
     stageUser: null,
+    stageProjectId: null,
     labelForm: {},
     goalForm: {},
     memberForm: { member_id: "" },
     dragIndex: null,
     dragStage: null,
     teamDrag: null,
+    taskDrag: null,
+    inlineColumn: null,
+    inlineColumnForm: { title: "", product_stage_id: "" },
     account: {},
     theme: localStorage.getItem("rasta-theme") || "system",
     async init() {
@@ -245,7 +245,6 @@ Alpine.data("workspace", () => ({
                 if (this.confirmBox) this.confirmBox = null;
                 else if (this.modal) this.closeModal();
                 else {
-                    this.searchOpen = false;
                     this.notificationsOpen = false;
                 }
             }
@@ -312,8 +311,6 @@ Alpine.data("workspace", () => ({
         this.page = page;
         this.projectId = id;
         this.sidebar = false;
-        this.query = "";
-        this.searchOpen = false;
         history.pushState({}, "", `/${page}${id ? "/" + id : ""}`);
         window.scrollTo(0, 0);
     },
@@ -386,19 +383,6 @@ Alpine.data("workspace", () => ({
             .sort((a, b) => a.due_date.localeCompare(b.due_date))
             .slice(0, 5);
     },
-    get searchResults() {
-        const q = this.query.trim();
-        if (!q) return [];
-        return [
-            ...this.projects
-                .filter((p) => p.name.includes(q))
-                .map((p) => ({ type: "پروژه", title: p.name, project: p.id })),
-            ...this.tasks
-                .filter((t) => t.title.includes(q))
-                .map((t) => ({ type: "تسک", title: t.title, task: t })),
-
-        ].slice(0, 12);
-    },
     get unread() {
         return this.notices.filter((n) => !n.read_at).length;
     },
@@ -426,7 +410,61 @@ Alpine.data("workspace", () => ({
         );
     },
     color(id) {
-        return ["#f9e2cf", "#e5def7", "#d7e9e2", "#dce7f5"][Number(id) % 4];
+        return [`var(--avatar-1)`, `var(--avatar-2)`, `var(--avatar-3)`, `var(--avatar-4)`][Number(id) % 4];
+    },
+    stageColor(i) {
+        return `var(--stage-${(i % 5) + 1})`;
+    },
+    myStages(project) {
+        return (project?.member_stages || []).filter((s) => s.member_id === this.user.id);
+    },
+    beginTaskDrag(task) {
+        this.taskDrag = task.id;
+    },
+    async dropTaskOnProductStage(stage) {
+        if (!this.taskDrag) return;
+        const task = this.tasks.find((item) => item.id === this.taskDrag);
+        this.taskDrag = null;
+        if (!task || task.product_stage_id === stage.id) return;
+        try {
+            const updated = await this.api(`/tasks/${task.id}/product-stage`, "PATCH", { product_stage_id: stage.id });
+            task.product_stage_id = updated.product_stage_id;
+            task.member_stage_id = updated.member_stage_id;
+            this.notify("مرحله محصول تسک تغییر کرد.");
+        } catch (e) {
+            this.fail(e);
+        }
+    },
+    startInlineColumn(kind, project) {
+        this.inlineColumn = { kind, project_id: project.id };
+        this.inlineColumnForm = { title: "", product_stage_id: kind === "member" ? (project.stages[0]?.id || "") : "" };
+        this.$nextTick(() => document.querySelector('[data-inline-column-input]')?.focus());
+    },
+    cancelInlineColumn() {
+        this.inlineColumn = null;
+        this.inlineColumnForm = { title: "", product_stage_id: "" };
+    },
+    async saveInlineColumn(kind, project) {
+        if (!this.inlineColumnForm.title.trim()) return;
+        const payload = {
+            title: this.inlineColumnForm.title.trim(),
+            description: "",
+            start_date: project.goal?.start_date || today(),
+            end_date: project.goal?.target_date || today(),
+        };
+        if (kind === "member") {
+            payload.member_id = this.user.id;
+            payload.product_stage_id = this.inlineColumnForm.product_stage_id;
+        }
+        try {
+            await this.api(`/projects/${project.id}/stages`, "POST", payload);
+            await this.refresh();
+            this.inlineColumnForm.title = "";
+            this.notify("ستون جدید ساخته شد.");
+            this.$nextTick(() => document.querySelector('[data-inline-column-input]')?.focus());
+        } catch (e) {
+            this.fail(e);
+        }
     },
     progress(p) {
         if (!p) return 0;
@@ -441,7 +479,7 @@ Alpine.data("workspace", () => ({
     stageTasks(id, mine = false) {
         return (mine ? this.myTasks : this.tasks).filter(
             (t) =>
-                t.product_stage_id === id &&
+                (mine ? t.member_stage_id === id : t.product_stage_id === id) &&
                 (this.taskFilter === "all" ||
                     (this.taskFilter === "done" && t.completed_at) ||
                     (this.taskFilter === "active" && !t.completed_at)),
@@ -523,13 +561,13 @@ Alpine.data("workspace", () => ({
             );
         else this.modal = null;
     },
-    ask(title, body, action, label = "تأیید") {
-        this.confirmBox = { title, body, action, label };
+    ask(title, body, action, label = "تأیید", transferOptions = []) {
+        this.confirmBox = { title, body, action, label, transferOptions, transferId: transferOptions[0]?.id || "" };
     },
     confirm() {
-        const action = this.confirmBox.action;
+        const box = this.confirmBox;
         this.confirmBox = null;
-        action();
+        box.action(box.transferId || null);
     },
     trap(e) {
         const focusable = [
@@ -586,8 +624,8 @@ Alpine.data("workspace", () => ({
                   project_id: p.id,
                   title: "",
                   description: "",
-                  product_stage_id: stage?.id || p.stages[0]?.id || "",
-                  member_stage_id: null,
+                  product_stage_id: stage?.product_stage_id || null,
+                  member_stage_id: stage?.member_id === this.user.id ? stage.id : (this.myStages(p).find((s) => !stage || s.product_stage_id === stage.id)?.id || ""),
                   owner_id: this.user.id,
                   members: [],
                   labels: [],
@@ -604,10 +642,31 @@ Alpine.data("workspace", () => ({
     get formProject() {
         return this.projects.find((p) => p.id == this.taskForm.project_id);
     },
+    get formMyStages() {
+        return (this.formProject?.member_stages || []).filter((stage) => stage.member_id == this.taskForm.owner_id);
+    },
     get formLabels() {
         return this.labels.filter(
-            (l) => l.project_id == this.taskForm.project_id && l.name.includes(this.labelQuery),
+            (l) => (l.project_id == this.taskForm.project_id || (!l.project_id && l.member_id === this.user.id)) && l.name.includes(this.labelQuery),
         );
+    },
+    projectChanged() {
+        this.taskForm.owner_id = this.user.id;
+        this.taskForm.member_stage_id = "";
+        this.taskForm.product_stage_id = null;
+        this.taskForm.members = [];
+        this.taskForm.labels = [];
+    },
+    ownerChanged() {
+        this.taskForm.member_stage_id = "";
+        this.taskForm.product_stage_id = null;
+    },
+    memberStageChanged() {
+        const stage = this.formMyStages.find((item) => item.id == this.taskForm.member_stage_id);
+        this.taskForm.product_stage_id = stage?.product_stage_id || null;
+    },
+    get selectedProductStage() {
+        return this.formProject?.stages?.find((stage) => stage.id == this.taskForm.product_stage_id) || null;
     },
     async saveTask() {
         this.busy = true;
@@ -693,21 +752,24 @@ Alpine.data("workspace", () => ({
             description: "",
             start_date: this.taskForm.start_date,
             end_date: this.taskForm.due_date,
+            member_id: this.taskForm.owner_id,
+            product_stage_id: this.formProject?.stages?.[0]?.id || "",
         };
         this.inlineStage = true;
     },
     async createInlineStage() {
         this.busy = true;
         try {
-            const s = await this.api(
+            const stage = await this.api(
                 `/projects/${this.taskForm.project_id}/stages`,
                 "POST",
                 this.inlineStageForm,
             );
             await this.refresh();
-            this.taskForm.product_stage_id = s.id;
+            this.taskForm.member_stage_id = stage.id;
+            this.taskForm.product_stage_id = stage.product_stage_id;
             this.inlineStage = false;
-            this.notify("مرحله ساخته و انتخاب شد.");
+            this.notify("مرحله من ساخته و انتخاب شد.");
         } catch (e) {
             this.fail(e);
         } finally {
@@ -875,7 +937,9 @@ Alpine.data("workspace", () => ({
         this.projectForm.stages.splice(i, 0, s);
         this.dragIndex = null;
     },
-    openStage(stage = null, user = null) {
+    openStage(stage = null, user = null, project = null) {
+        const p = project || this.currentProject || this.projects.find((item) => item.id === stage?.project_id);
+        this.stageProjectId = p?.id || null;
         this.stageId = stage?.id || null;
         this.stageUser = user;
         this.stageKind = user ? "member" : "product";
@@ -884,17 +948,21 @@ Alpine.data("workspace", () => ({
             : {
                   title: "",
                   description: "",
-                  start_date: this.currentProject?.goal.start_date || today(),
-                  end_date: this.currentProject?.goal.target_date || today(),
+                  start_date: p?.goal?.start_date || today(),
+                  end_date: p?.goal?.target_date || today(),
+                  product_stage_id: user ? p?.stages?.[0]?.id || "" : null,
               };
         if (user) this.stageForm.member_id = user.id;
         this.showModal("stage");
+    },
+    get stageProject() {
+        return this.projects.find((item) => item.id === this.stageProjectId) || null;
     },
     async saveStage() {
         this.busy = true;
         try {
             await this.api(
-                `/projects/${this.projectId}/stages` +
+                `/projects/${this.stageProjectId}/stages` +
                     (this.stageId ? `/${this.stageKind}/${this.stageId}` : ""),
                 this.stageId ? "PUT" : "POST",
                 this.stageForm,
@@ -908,24 +976,37 @@ Alpine.data("workspace", () => ({
             this.busy = false;
         }
     },
-    deleteStage(s, kind = "product") {
+    deleteStage(stage, kind = "product", user = null) {
+        const project = this.currentProject || this.projects.find((item) => item.id === stage.project_id);
+        const options = (kind === "member"
+            ? project.member_stages.filter((item) => item.member_id === (user?.id || stage.member_id) && item.id !== stage.id)
+            : project.stages.filter((item) => item.id !== stage.id)
+        ).map((item) => ({ id: item.id, title: item.title }));
+        const hasTasks = kind === "member"
+            ? this.tasks.some((task) => task.member_stage_id === stage.id)
+            : this.tasks.some((task) => task.product_stage_id === stage.id);
+        if (hasTasks && !options.length) {
+            return this.notify("برای حذف این ستون ابتدا یک ستون مقصد بسازید.", true);
+        }
         this.ask(
-            "حذف مرحله",
-            "مرحله حذف شود؟ مرحله‌های دارای تسک ابتدا باید خالی شوند.",
-            async () => {
+            "حذف ستون",
+            hasTasks ? "این ستون تسک دارد. ستون مقصد انتقال تسک‌ها را انتخاب کنید." : "این ستون حذف شود؟",
+            async (transferId) => {
                 try {
-                    await this.api(
-                        `/projects/${this.projectId}/stages/${kind}/${s.id}`,
-                        "DELETE",
-                    );
+                    const url = `/projects/${project.id}/stages/${kind}/${stage.id}`;
+                    const headers = { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content };
+                    const res = await fetch("/api" + url, { method: "DELETE", headers, body: hasTasks ? JSON.stringify({ transfer_stage_id: Number(transferId) }) : null });
+                    const data = res.status === 204 ? {} : await res.json();
+                    if (!res.ok) throw data;
                     await this.refresh();
                     this.modal = null;
-                    this.notify("مرحله حذف شد.");
+                    this.notify("ستون حذف شد.");
                 } catch (e) {
                     this.fail(e);
                 }
             },
-            "حذف",
+            "حذف ستون",
+            hasTasks ? options : [],
         );
     },
     async reorderStage(target, kind = "product", user = null) {

@@ -62,7 +62,8 @@ class ProfileAndActivityTest extends WorkspaceCase
         $payload['title'] = 'عنوان تازه';
         $payload['start_date'] = '2026-10-02';
         $payload['due_date'] = '2026-11-01';
-        $payload['product_stage_id'] = $project->stages()->orderBy('position')->skip(1)->value('id');
+        $otherStage = $project->memberStages()->create(['member_id' => $other->id, 'product_stage_id' => $project->stages()->orderBy('position')->skip(1)->value('id'), 'name' => 'مرحله سارا', 'position' => 0]);
+        $payload['member_stage_id'] = $otherStage->id;
         $payload['owner_id'] = $other->id;
         $this->putJson("/api/tasks/$taskId", $payload)->assertOk();
 

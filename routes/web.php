@@ -16,7 +16,8 @@ Route::middleware(SharedAccess::class)->group(function () {
 });
 Route::middleware([SharedAccess::class, 'auth'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
-    foreach (['/dashboard', '/projects', '/projects/{project}', '/projects/{project}/goal', '/projects/{project}/stages', '/projects/{project}/members', '/tasks', '/tasks/{task}', '/labels', '/settings'] as $path) {
+    Route::redirect('/projects', '/dashboard');
+    foreach (['/dashboard', '/projects/{project}', '/projects/{project}/goal', '/projects/{project}/stages', '/projects/{project}/members', '/tasks', '/tasks/{task}', '/labels', '/settings'] as $path) {
         Route::get($path, function () {
             return view('workspace');
         });
@@ -34,6 +35,7 @@ Route::middleware([SharedAccess::class, 'auth'])->group(function () {
         Route::post('/tasks', 'saveTask');
         Route::put('/tasks/{task}', 'saveTask');
         Route::patch('/tasks/{task}/complete', 'complete');
+        Route::patch('/tasks/{task}/product-stage', 'moveTaskStage');
         Route::delete('/tasks/{task}', 'removeTask');
         Route::post('/labels', 'label');
         Route::match(['put', 'delete'], '/labels/{label}', 'label');

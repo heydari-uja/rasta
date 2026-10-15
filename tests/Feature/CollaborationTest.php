@@ -48,7 +48,9 @@ class CollaborationTest extends WorkspaceCase
         $other = Member::create(['name' => 'مسئول دیگر', 'job_title' => 'طراح']);
         $p->members()->attach($other);
         $v = $this->taskPayload($p);
+        $otherStage = $p->memberStages()->create(['member_id' => $other->id, 'product_stage_id' => $p->stages()->first()->id, 'name' => 'مرحله مسئول', 'position' => 0]);
         $v['owner_id'] = $other->id;
+        $v['member_stage_id'] = $otherStage->id;
         $id = $this->postJson('/api/tasks', $v)->assertCreated()->json('id');
         $this->assertDatabaseHas('notices', ['member_id' => $other->id, 'type' => 'assigned']);
         $v['title'] = 'اصلاح';

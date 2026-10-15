@@ -8,9 +8,10 @@ class WorkspaceTest extends WorkspaceCase
 {
     public function test_all_views_render_and_empty_workspace_has_no_fixtures(): void
     {
-        foreach (['/dashboard', '/projects', '/tasks', '/labels', '/settings'] as $route) {
+        foreach (['/dashboard', '/tasks', '/labels', '/settings'] as $route) {
             $this->get($route)->assertOk()->assertSee('dir="rtl"', false)->assertSee('lang="fa"', false);
         }
+        $this->get('/projects')->assertRedirect('/dashboard');
         $this->getJson('/api/workspace')->assertJsonCount(0, 'projects')->assertJsonCount(0, 'tasks')->assertJsonCount(0, 'labels')->assertJsonCount(0, 'notices');
     }
 
@@ -38,5 +39,14 @@ class WorkspaceTest extends WorkspaceCase
         $css = file_get_contents(resource_path('css/app.css'));
         $this->assertStringContainsString('@custom-variant dark', $css);
         $this->assertStringContainsString('.dark {', $css);
+    }
+
+    public function test_boards_expose_inline_column_creation_and_task_modal_can_create_personal_stage(): void
+    {
+        $this->get('/tasks')->assertOk()
+            ->assertSee('＋ افزودن ستون')
+            ->assertSee('saveInlineColumn', false)
+            ->assertSee('ساخت مرحله من')
+            ->assertSee('startInlineStage()', false);
     }
 }
