@@ -229,7 +229,12 @@ Alpine.data("workspace", () => ({
     teamDrag: null,
     taskDrag: null,
     inlineColumn: null,
-    inlineColumnForm: { title: "", product_stage_id: "" },
+    inlineColumnForm: { title: "", description: "", product_stage_id: "" },
+    columnRename: null,
+    columnRenameTitle: "",
+    taskAutosaveTimer: null,
+    taskSaving: false,
+    expandedSubtasks: JSON.parse(localStorage.getItem("rasta-subtasks-open") || "{}"),
     account: {},
     theme: localStorage.getItem("rasta-theme") || "system",
     async init() {
@@ -437,18 +442,18 @@ Alpine.data("workspace", () => ({
     },
     startInlineColumn(kind, project) {
         this.inlineColumn = { kind, project_id: project.id };
-        this.inlineColumnForm = { title: "", product_stage_id: kind === "member" ? (project.stages[0]?.id || "") : "" };
+        this.inlineColumnForm = { title: "", description: "", product_stage_id: kind === "member" ? (project.stages[0]?.id || "") : "" };
         this.$nextTick(() => document.querySelector('[data-inline-column-input]')?.focus());
     },
     cancelInlineColumn() {
         this.inlineColumn = null;
-        this.inlineColumnForm = { title: "", product_stage_id: "" };
+        this.inlineColumnForm = { title: "", description: "", product_stage_id: "" };
     },
     async saveInlineColumn(kind, project) {
         if (!this.inlineColumnForm.title.trim()) return;
         const payload = {
             title: this.inlineColumnForm.title.trim(),
-            description: "",
+            description: this.inlineColumnForm.description.trim() || "",
             start_date: project.goal?.start_date || today(),
             end_date: project.goal?.target_date || today(),
         };
@@ -460,11 +465,100 @@ Alpine.data("workspace", () => ({
             await this.api(`/projects/${project.id}/stages`, "POST", payload);
             await this.refresh();
             this.inlineColumnForm.title = "";
+            this.inlineColumnForm.description = "";
             this.notify("ستون جدید ساخته شد.");
             this.$nextTick(() => document.querySelector('[data-inline-column-input]')?.focus());
         } catch (e) {
             this.fail(e);
         }
+    },
+    beginColumnRename(stage, kind, project, user = null) {
+        this.columnRename = { id: stage.id, kind, project_id: project.id, user_id: user?.id || stage.member_id || null };
+        this.columnRenameTitle = stage.title;
+        this.$nextTick(() => document.querySelector('[data-column-rename-input]')?.focus());
+    },
+    cancelColumnRename() {
+        this.columnRename = null;
+        this.columnRenameTitle = "";
+    },
+    async saveColumnRename(stage, kind, project) {
+        const title = this.columnRenameTitle.trim();
+        if (!title) return;
+        try {
+            await this.api(`/projects/${project.id}/stages/${kind}/${stage.id}`, "PUT", {
+                title,
+                description: stage.description || "",
+                start_date: stage.start_date || null,
+                end_date: stage.end_date || null,
+                ...(kind === "member" ? { product_stage_id: stage.product_stage_id } : {}),
+            });
+            stage.title = title;
+            this.cancelColumnRename();
+            this.notify("ذخیره شد");
+        } catch (e) { this.fail(e); }
+    },
+    subtasksExpanded(task) {
+        return !!this.expandedSubtasks[task.id];
+    },
+    toggleSubtasks(task) {
+        this.expandedSubtasks[task.id] = !this.expandedSubtasks[task.id];
+        this.expandedSubtasks = { ...this.expandedSubtasks };
+        localStorage.setItem("rasta-subtasks-open", JSON.stringify(this.expandedSubtasks));
+    },
+    async toggleBoardSubtask(task, subtask) {
+        const payload = {
+            ...clone(task),
+            labels: task.labels.map((item) => item.id),
+            members: task.members.map((item) => item.id),
+            completed: !!task.completed_at,
+            subtasks: task.subtasks.map((item) => ({ id: item.id, title: item.title, completed: item.id === subtask.id ? !item.completed_at : !!item.completed_at })),
+        };
+        try {
+            await this.api(`/tasks/${task.id}`, "PUT", payload);
+            subtask.completed_at = subtask.completed_at ? null : new Date().toISOString();
+            this.notify("ذخیره شد");
+        } catch (e) { this.fail(e); }
+    },
+    scheduleTaskAutosave() {
+        if (!this.taskForm.id || !this.canWrite(this.formProject)) return;
+        clearTimeout(this.taskAutosaveTimer);
+        this.taskAutosaveTimer = setTimeout(() => this.autosaveTask(), 500);
+    },
+    async autosaveTask() {
+        if (!this.taskForm.id || this.taskSaving || !this.canWrite(this.formProject)) return;
+        clearTimeout(this.taskAutosaveTimer);
+        this.taskSaving = true;
+        this.errors = {};
+        try {
+            await this.api(`/tasks/${this.taskForm.id}`, "PUT", this.taskForm);
+            const local = this.tasks.find((item) => item.id === this.taskForm.id);
+            if (local) {
+                Object.assign(local, { title: this.taskForm.title, description: this.taskForm.description, owner_id: this.taskForm.owner_id, member_stage_id: this.taskForm.member_stage_id, product_stage_id: this.taskForm.product_stage_id, start_date: this.taskForm.start_date, due_date: this.taskForm.due_date });
+            }
+            this.modalSnapshot = this.snapshot();
+            this.notify("ذخیره شد");
+        } catch (e) { this.fail(e); } finally { this.taskSaving = false; }
+    },
+    autosaveTaskNow() {
+        if (!this.taskForm.id) return;
+        clearTimeout(this.taskAutosaveTimer);
+        return this.autosaveTask();
+    },
+    async closeTaskComposer() {
+        if (!this.taskForm.id) return this.closeModal();
+        await this.autosaveTaskNow();
+        this.modal = null;
+    },
+    taskNeighbor(delta) {
+        if (!this.taskForm.id) return;
+        const list = this.tasks.filter((item) => item.project_id === this.taskForm.project_id);
+        const index = list.findIndex((item) => item.id === this.taskForm.id);
+        if (index < 0 || list.length < 2) return;
+        this.openTask(list[(index + delta + list.length) % list.length]);
+    },
+    toggleTaskForm() {
+        if (!this.taskForm.id) { this.taskForm.completed = !this.taskForm.completed; return; }
+        this.toggleTask(this.taskForm).then(() => { this.taskForm.completed = !!this.taskForm.completed_at; });
     },
     progress(p) {
         if (!p) return 0;
@@ -656,14 +750,17 @@ Alpine.data("workspace", () => ({
         this.taskForm.product_stage_id = null;
         this.taskForm.members = [];
         this.taskForm.labels = [];
+        this.autosaveTaskNow();
     },
     ownerChanged() {
         this.taskForm.member_stage_id = "";
         this.taskForm.product_stage_id = null;
+        this.autosaveTaskNow();
     },
     memberStageChanged() {
         const stage = this.formMyStages.find((item) => item.id == this.taskForm.member_stage_id);
         this.taskForm.product_stage_id = stage?.product_stage_id || null;
+        this.autosaveTaskNow();
     },
     get selectedProductStage() {
         return this.formProject?.stages?.find((stage) => stage.id == this.taskForm.product_stage_id) || null;
@@ -787,17 +884,28 @@ Alpine.data("workspace", () => ({
             this.labels.push(l);
             this.taskForm.labels.push(l.id);
             this.labelQuery = "";
+            this.autosaveTaskNow();
         } catch (e) {
             this.fail(e);
         }
     },
-    filesAdded(files) {
+    async filesAdded(files) {
         for (const f of files) {
             if (f.size > 5 * 1024 * 1024) {
                 this.notify("حداکثر حجم هر فایل ۵ مگابایت است.", true);
                 continue;
             }
-            this.pendingFiles.push(f);
+            if (!this.taskForm.id) {
+                this.pendingFiles.push(f);
+                continue;
+            }
+            try {
+                const data = new FormData();
+                data.append("file", f);
+                const attachment = await this.api(`/tasks/${this.taskForm.id}/attachments`, "POST", data);
+                this.taskForm.attachments.push(attachment);
+                this.notify("ذخیره شد");
+            } catch (e) { this.fail(e); }
         }
     },
     size(n) {

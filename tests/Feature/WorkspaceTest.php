@@ -44,7 +44,7 @@ class WorkspaceTest extends WorkspaceCase
     public function test_boards_expose_inline_column_creation_and_task_modal_can_create_personal_stage(): void
     {
         $this->get('/tasks')->assertOk()
-            ->assertSee('＋ افزودن ستون')
+            ->assertSee('افزودن ستون')
             ->assertSee('saveInlineColumn', false)
             ->assertSee('ساخت مرحله من')
             ->assertSee('startInlineStage()', false);
