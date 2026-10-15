@@ -111,6 +111,7 @@ return new class extends Migration
             $t->foreignId('member_id')->constrained()->cascadeOnDelete();
             $t->foreignId('task_id')->nullable()->constrained()->cascadeOnDelete();
             $t->string('body');
+            $t->string('type');
             $t->timestamp('read_at')->nullable();
             $t->timestamps();
         });

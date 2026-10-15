@@ -12,6 +12,7 @@ use App\Models\Member;
 use App\Services\ProjectAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -154,7 +155,7 @@ return $p;
             return $task;
         });
         if ($task->assigned_to && $task->assigned_to !== $r->user()->id) {
-            Notice::create(['member_id' => $task->assigned_to, 'task_id' => $task->id, 'body' => ($new || $oldAssignee !== $task->assigned_to ? 'تسک جدید برای شما: ' : 'تسک به‌روزرسانی شد: ').$task->title]);
+            Notice::create(['member_id' => $task->assigned_to, 'task_id' => $task->id, 'type' => ($new || $oldAssignee !== $task->assigned_to ? 'assigned' : 'edited'), 'body' => ($new || $oldAssignee !== $task->assigned_to ? 'تسک جدید برای شما: ' : 'تسک به‌روزرسانی شد: ').$task->title]);
         }
 
         return response()->json($task->load(['subtasks', 'labels', 'members']), $new ? 201 : 200);
@@ -213,7 +214,7 @@ return $label;
         $v = $r->validate(['body' => 'required|string|max:5000']);
         $c = $task->comments()->create([...$v, 'member_id' => $r->user()->id]);
         if ($task->assigned_to && $task->assigned_to !== $r->user()->id) {
-            Notice::create(['member_id' => $task->assigned_to, 'task_id' => $task->id, 'body' => 'نظر جدید در «'.$task->title.'»']);
+            Notice::create(['member_id' => $task->assigned_to, 'task_id' => $task->id, 'type' => 'comment', 'body' => 'نظر جدید در «'.$task->title.'»']);
         }
 
 return response()->json($c->load('user'), 201);
@@ -222,7 +223,7 @@ return response()->json($c->load('user'), 201);
     public function editComment(Request $r, Comment $comment)
     {
         ProjectAccess::check($comment->task->project, 'write');
-        abort_unless($comment->member_id === $r->user()->id, 403);
+        Gate::authorize($r->isMethod('delete') ? 'delete' : 'update', $comment);
         if ($r->isMethod('delete')) {
             $comment->delete();
 
@@ -252,7 +253,7 @@ return response()->json($c->load('user'), 201);
     public function removeAttachment(Request $r, Attachment $attachment)
     {
         $role = ProjectAccess::check($attachment->task->project, 'write');
-        abort_unless($attachment->member_id === $r->user()->id || $role === 'owner', 403);
+        Gate::authorize('delete', $attachment);
         Storage::disk('local')->delete($attachment->path);
         $attachment->delete();
 
