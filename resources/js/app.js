@@ -168,6 +168,7 @@ Alpine.data("datePicker", () => ({
 Alpine.data("workspace", () => ({
     user: {},
     projects: [],
+    members: [],
     tasks: [],
     labels: [],
     notices: [],
@@ -204,7 +205,7 @@ Alpine.data("workspace", () => ({
     stageUser: null,
     labelForm: {},
     goalForm: {},
-    memberForm: { email: "", role: "member" },
+    memberForm: { member_id: "" },
     dragIndex: null,
     dragStage: null,
     teamDrag: null,
@@ -268,7 +269,7 @@ Alpine.data("workspace", () => ({
         try {
             const d = await this.api("/workspace");
             Object.assign(this, d);
-            this.account = { name: d.user.name, email: d.user.email };
+            this.account = { name: d.user.name, job_title: d.user.job_title };
             this.loadError = "";
         } catch (e) {
             this.loadError = e.message || "دریافت اطلاعات ممکن نشد.";
@@ -417,10 +418,10 @@ Alpine.data("workspace", () => ({
         return !t.completed_at && t.due_date < today();
     },
     canWrite(project) {
-        return project?.pivot?.role !== "viewer";
+        return !!project;
     },
     isOwner(project) {
-        return project?.pivot?.role === "owner";
+        return !!project;
     },
     notify(message, error = false) {
         this.toast = message;
@@ -756,6 +757,7 @@ Alpine.data("workspace", () => ({
     openProject() {
         this.projectStep = 1;
         this.projectForm = {
+            color: "#d29268",
             name: "",
             description: "",
             goal: {
@@ -765,26 +767,7 @@ Alpine.data("workspace", () => ({
                 start_date: today(),
                 end_date: today(),
             },
-            stages: [
-                {
-                    title: "پژوهش",
-                    description: "",
-                    start_date: today(),
-                    end_date: today(),
-                },
-                {
-                    title: "طراحی",
-                    description: "",
-                    start_date: today(),
-                    end_date: today(),
-                },
-                {
-                    title: "توسعه",
-                    description: "",
-                    start_date: today(),
-                    end_date: today(),
-                },
-            ],
+            stages: [],
         };
         this.showModal("project");
     },

@@ -20,25 +20,25 @@ class WorkspaceController extends Controller
 {
     private function visibleLabels(Request $r)
     {
-        $ids = $r->user()->projects()->pluck('projects.id');
+        $ids = Project::pluck('id');
 
         return Label::where(fn ($q) => $q->whereIn('project_id', $ids)->orWhere(fn ($q) => $q->whereNull('project_id')->where('created_by', $r->user()->id)));
     }
 
     public function data(Request $r)
     {
-        $projects = $r->user()->projects()->with(['goal', 'stages', 'memberStages', 'members'])->withCount(['tasks', 'tasks as completed_count' => fn ($q) => $q->whereNotNull('completed_at')])->get();
+        $projects = Project::with(['goal', 'stages', 'memberStages', 'members'])->withCount(['tasks', 'tasks as completed_count' => fn ($q) => $q->whereNotNull('completed_at')])->get();
         $tasks = Task::whereIn('project_id', $projects->pluck('id'))->with(['subtasks', 'labels', 'members', 'assignee'])->latest()->get();
 
-        return ['user' => $r->user(), 'projects' => $projects, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notices' => Notice::where('member_id', $r->user()->id)->latest()->limit(30)->get()];
+        return ['user' => $r->user(), 'members' => Member::where('active',true)->get(), 'projects' => $projects, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notices' => Notice::where('member_id', $r->user()->id)->latest()->limit(30)->get()];
     }
 
     public function project(Request $r)
     {
-        $v = $r->validate(['name' => 'required|string|max:150', 'description' => 'nullable|string|max:2000', 'goal' => 'required|array:title,description,success_criteria,start_date,end_date', 'goal.title' => 'required|string|max:200', 'goal.description' => 'nullable|string|max:3000', 'goal.success_criteria' => 'required|string|max:3000', 'goal.start_date' => 'required|date_format:Y-m-d', 'goal.end_date' => 'required|date_format:Y-m-d|after_or_equal:goal.start_date', 'stages' => 'required|array|min:1|max:30', 'stages.*' => 'array:title,description,start_date,end_date', 'stages.*.title' => 'required|string|max:120', 'stages.*.description' => 'nullable|string|max:2000', 'stages.*.start_date' => 'nullable|date_format:Y-m-d', 'stages.*.end_date' => 'nullable|date_format:Y-m-d|after_or_equal:stages.*.start_date']);
+        $v = $r->validate(['name' => 'required|string|max:150', 'color' => 'required|regex:/^#[0-9a-fA-F]{6}$/', 'description' => 'nullable|string|max:2000', 'goal' => 'required|array:title,description,success_criteria,start_date,end_date', 'goal.title' => 'required|string|max:200', 'goal.description' => 'nullable|string|max:3000', 'goal.success_criteria' => 'required|string|max:3000', 'goal.start_date' => 'required|date_format:Y-m-d', 'goal.end_date' => 'required|date_format:Y-m-d|after_or_equal:goal.start_date', 'stages' => 'required|array|min:1|max:30', 'stages.*' => 'array:title,description,start_date,end_date', 'stages.*.title' => 'required|string|max:120', 'stages.*.description' => 'nullable|string|max:2000', 'stages.*.start_date' => 'nullable|date_format:Y-m-d', 'stages.*.end_date' => 'nullable|date_format:Y-m-d|after_or_equal:stages.*.start_date']);
         $p = DB::transaction(function () use ($v, $r) {
-            $p = Project::create(['name' => $v['name'], 'description' => $v['description'] ?? null, 'created_by' => $r->user()->id]);
-            $p->members()->attach($r->user()->id, ['role' => 'owner']);
+            $p = Project::create(['name' => $v['name'], 'description' => $v['description'] ?? null, 'created_by' => $r->user()->id, 'color' => $v['color']]);
+            $p->members()->attach($r->user()->id);
             $p->goal()->create($v['goal']);
             foreach ($v['stages'] as $i => $s) {
                 $p->stages()->create([...$s, 'position' => $i]);
@@ -106,10 +106,8 @@ return $p;
     public function member(Request $r, Project $project)
     {
         ProjectAccess::check($project, 'owner');
-        $v = $r->validate(['email' => 'required|email|exists:members,email', 'role' => 'required|in:member,viewer']);
-        $user = Member::where('email', $v['email'])->firstOrFail();
-        abort_if($user->id === $project->created_by, 422, 'نقش مالک قابل تغییر نیست.');
-        $project->members()->syncWithoutDetaching([$user->id => ['role' => $v['role']]]);
+        $v = $r->validate(['member_id' => 'required|integer|exists:members,id']);
+        $project->members()->syncWithoutDetaching([$v['member_id']]);
 
         return ['ok' => true];
     }
@@ -270,7 +268,7 @@ return response()->json($c->load('user'), 201);
 
     public function settings(Request $r)
     {
-        $v = $r->validate(['name' => 'required|string|max:100', 'email' => ['required', 'email', Rule::unique('members')->ignore($r->user()->id)]]);
+        $v = $r->validate(['name' => ['required','string','max:100',Rule::unique('members')->ignore($r->user()->id)], 'job_title' => 'required|string|max:100']);
         $r->user()->update($v);
 
         return $r->user();
