@@ -90,7 +90,7 @@ const today = () =>
     }).format(new Date());
 const date = (d) =>
     d
-        ? new Intl.DateTimeFormat("fa-IR", {
+        ? new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
               day: "numeric",
               month: "long",
           }).format(new Date(d + "T12:00:00"))
@@ -135,7 +135,7 @@ Alpine.data("datePicker", () => ({
         const start = new Date(this.cursor);
         start.setDate(start.getDate() - this.parts(start).day + 1);
         this.cursor = start;
-        this.heading = new Intl.DateTimeFormat("fa-IR", {
+        this.heading = new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
             month: "long",
             year: "numeric",
         }).format(start);
@@ -298,7 +298,7 @@ Alpine.data("workspace", () => ({
     date,
     today,
     fullDate() {
-        return new Intl.DateTimeFormat("fa-IR", {
+        return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
             weekday: "long",
             day: "numeric",
             month: "long",
@@ -318,8 +318,13 @@ Alpine.data("workspace", () => ({
     },
     get todayTasks() {
         return this.myTasks.filter(
-            (t) => !t.completed_at && t.due_date <= today(),
+            (t) => !t.completed_at && t.due_date === today(),
         );
+    },
+    get deadlines() {
+        const end=new Date(today()+"T12:00:00"); end.setDate(end.getDate()+7);
+        const limit=end.toLocaleDateString("en-CA");
+        return this.myTasks.filter(t=>!t.completed_at&&t.due_date>=today()&&t.due_date<=limit);
     },
     get upcoming() {
         return [...this.myTasks]
@@ -337,15 +342,7 @@ Alpine.data("workspace", () => ({
             ...this.tasks
                 .filter((t) => t.title.includes(q))
                 .map((t) => ({ type: "تسک", title: t.title, task: t })),
-            ...this.projects.flatMap((p) =>
-                p.stages
-                    .filter((s) => s.title.includes(q))
-                    .map((s) => ({
-                        type: "مرحله",
-                        title: s.title,
-                        project: p.id,
-                    })),
-            ),
+
         ].slice(0, 12);
     },
     get unread() {
