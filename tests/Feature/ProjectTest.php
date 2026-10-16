@@ -48,4 +48,21 @@ class ProjectTest extends WorkspaceCase
         $this->actingAs($other)->putJson('/api/projects/'.$p->id.'/goal', $this->payload()['goal'])->assertOk();
         $this->postJson('/api/projects/'.$p->id.'/members', ['member_id' => $other->id])->assertNotFound();
     }
+
+    public function test_project_can_be_edited_and_deleted(): void
+    {
+        $p = $this->project();
+        $this->postJson('/api/tasks', $this->taskPayload($p))->assertCreated();
+
+        $this->putJson('/api/projects/'.$p->id, [
+            'name' => 'نام ویرایش‌شده',
+            'description' => 'توضیح تازه',
+            'color' => '#5877b9',
+        ])->assertOk()->assertJsonPath('name', 'نام ویرایش‌شده');
+        $this->assertDatabaseHas('projects', ['id' => $p->id, 'name' => 'نام ویرایش‌شده', 'color' => '#5877b9']);
+
+        $this->deleteJson('/api/projects/'.$p->id)->assertNoContent();
+        $this->assertDatabaseMissing('projects', ['id' => $p->id]);
+        $this->assertDatabaseCount('tasks', 0);
+    }
 }

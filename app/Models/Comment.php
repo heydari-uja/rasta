@@ -17,4 +17,9 @@ class Comment extends Model
     {
         return $this->belongsTo(Member::class, 'member_id');
     }
+
+    public function attachments()
+    {
+        return $this->hasMany(Attachment::class);
+    }
 }

@@ -20,7 +20,7 @@ class AuthController extends Controller
         $r->session()->regenerate();
         $r->session()->put('shared_access', hash('sha256', $hash));
 
-        return redirect(Auth::check() ? '/dashboard' : '/profiles');
+        return redirect(Auth::check() ? '/tasks' : '/profiles');
     }
 
     public function profiles()
@@ -40,7 +40,7 @@ class AuthController extends Controller
         Auth::login($member, true);
         $r->session()->regenerate();
 
-        return redirect('/dashboard');
+        return redirect('/tasks');
     }
 
     public function switch(Request $r)

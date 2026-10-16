@@ -18,6 +18,7 @@
   "dependencies": {
     "@fontsource/vazirmatn": "^5.2.5",
     "alpinejs": "^3.14.9",
-    "lucide": "^0.468.0"
+    "lucide": "^0.468.0",
+    "sortablejs": "^1.15.7"
   }
 }

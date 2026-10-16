@@ -35,13 +35,13 @@ class ProfileAndActivityTest extends WorkspaceCase
         $this->post('/api/settings/avatar', ['avatar' => UploadedFile::fake()->create('avatar.gif', 100, 'image/gif')], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('avatar');
     }
 
-    public function test_task_activity_records_requested_changes_without_assignee_changes(): void
+    public function test_task_history_records_only_title_and_date_changes(): void
     {
         $project = $this->project();
         $payload = $this->taskPayload($project);
         $created = $this->postJson('/api/tasks', $payload)->assertCreated();
         $taskId = $created->json('id');
-        $this->assertDatabaseHas('task_activities', ['task_id' => $taskId, 'type' => 'created', 'member_id' => $this->member->id]);
+        $this->assertSame(0, TaskActivity::where('task_id', $taskId)->count());
 
         $secondStage = $project->memberStages()->create([
             'member_id' => $this->member->id,
@@ -55,17 +55,21 @@ class ProfileAndActivityTest extends WorkspaceCase
         $payload['member_stage_id'] = $secondStage->id;
         $this->putJson('/api/tasks/'.$taskId, $payload)->assertOk();
 
-        foreach (['title', 'start_date', 'due_date', 'stage'] as $type) {
+        foreach (['title', 'start_date', 'due_date'] as $type) {
             $this->assertDatabaseHas('task_activities', ['task_id' => $taskId, 'type' => $type, 'member_id' => $this->member->id]);
         }
-        $this->assertDatabaseMissing('task_activities', ['task_id' => $taskId, 'type' => 'assignee']);
+        foreach (['created', 'stage', 'completed', 'reopened', 'assignee'] as $type) {
+            $this->assertDatabaseMissing('task_activities', ['task_id' => $taskId, 'type' => $type]);
+        }
+        $this->assertSame(3, TaskActivity::where('task_id', $taskId)->count());
+
+        $this->putJson('/api/tasks/'.$taskId, $payload)->assertOk();
+        $this->assertSame(3, TaskActivity::where('task_id', $taskId)->count());
 
         $this->patchJson('/api/tasks/'.$taskId.'/complete', ['completed' => true])->assertOk();
         $this->patchJson('/api/tasks/'.$taskId.'/complete', ['completed' => false])->assertOk();
-        $this->assertDatabaseHas('task_activities', ['task_id' => $taskId, 'type' => 'completed']);
-        $this->assertDatabaseHas('task_activities', ['task_id' => $taskId, 'type' => 'reopened']);
+        $this->assertSame(3, TaskActivity::where('task_id', $taskId)->count());
         $detail = $this->getJson('/api/tasks/'.$taskId)->assertOk();
-        $this->assertNotEmpty($detail->json('activities'));
-        $this->assertSame(7, TaskActivity::where('task_id', $taskId)->count());
+        $this->assertCount(3, $detail->json('activities'));
     }
 }

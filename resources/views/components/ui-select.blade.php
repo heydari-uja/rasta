@@ -1,5 +1,5 @@
 @props(['model', 'options', 'placeholder' => 'انتخاب کنید', 'change' => ''])
-<div class="ui-select" x-data="{open:false,menuStyle:'',position(){const r=this.$refs.trigger.getBoundingClientRect();const w=Math.max(180,r.width);const left=Math.max(12,Math.min(innerWidth-w-12,r.left));const below=r.bottom+6;const top=below+260<innerHeight?below:Math.max(12,r.top-260);this.menuStyle=`position:fixed;top:${top}px;left:${left}px;width:${w}px`}}" @keydown.escape.stop="open=false">
+<div class="ui-select" x-data="{open:false,menuStyle:'',position(){const r=this.$refs.trigger.getBoundingClientRect();const w=r.width;const left=Math.max(8,Math.min(innerWidth-w-8,r.left));const below=r.bottom+6;const top=below+260<innerHeight?below:Math.max(12,r.top-260);this.menuStyle=`position:fixed;top:${top}px;left:${left}px;width:${w}px`}}" @keydown.escape.stop="open=false">
     <button type="button" class="ui-select-trigger" x-ref="trigger" @click="open=!open;if(open)$nextTick(()=>position())" @keydown.arrow-down.prevent="open=true;$nextTick(()=>{position();setTimeout(()=>$refs.menu?.querySelector('.ui-select-option')?.focus(),0)})" :aria-expanded="open">
         <span x-text="({{ $options }}).find(o=>String(o.value)===String({{ $model }}))?.label || @js($placeholder)"></span>
         <span class="ui-select-chevron" x-html="$icon('ChevronDown')"></span>

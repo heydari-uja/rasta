@@ -8,10 +8,11 @@ class WorkspaceTest extends WorkspaceCase
 {
     public function test_all_views_render_and_empty_workspace_has_no_fixtures(): void
     {
-        foreach (['/dashboard', '/tasks', '/labels', '/settings'] as $route) {
+        foreach (['/tasks', '/labels', '/settings'] as $route) {
             $this->get($route)->assertOk()->assertSee('dir="rtl"', false)->assertSee('lang="fa"', false);
         }
-        $this->get('/projects')->assertRedirect('/dashboard');
+        $this->get('/projects')->assertRedirect('/tasks');
+        $this->get('/dashboard')->assertNotFound();
         $this->getJson('/api/workspace')->assertJsonCount(0, 'projects')->assertJsonCount(0, 'tasks')->assertJsonCount(0, 'labels')->assertJsonCount(0, 'notifications');
     }
 
@@ -41,12 +42,20 @@ class WorkspaceTest extends WorkspaceCase
         $this->assertStringContainsString('.dark {', $css);
     }
 
-    public function test_boards_expose_inline_column_creation_and_task_modal_can_create_personal_stage(): void
+    public function test_task_modal_uses_column_project_and_asks_for_product_stage(): void
     {
         $this->get('/tasks')->assertOk()
             ->assertSee('افزودن ستون')
-            ->assertSee('saveInlineColumn', false)
-            ->assertSee('ساخت مرحله من')
-            ->assertSee('startInlineStage()', false);
+            ->assertSee('saveTaskColumn', false)
+            ->assertSee('inlineColumnForm.project_id', false)
+            ->assertSee('data-my-stages-board', false)
+            ->assertSee('taskForm.product_stage_id', false)
+            ->assertSee('مرحله پروژه')
+            ->assertSee('productStageChanged()', false)
+            ->assertDontSee('projectChanged()', false)
+            ->assertSee('closeTaskComposer()', false)
+            ->assertDontSee('ساخت مرحله من')
+            ->assertDontSee('startInlineStage()', false)
+            ->assertDontSee('taskNeighbor(', false);
     }
 }

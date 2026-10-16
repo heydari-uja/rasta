@@ -47,20 +47,54 @@ class CollaborationTest extends WorkspaceCase
         $this->actingAs($other)->deleteJson('/api/comments/'.$commentId)->assertNoContent();
     }
 
-    public function test_attachments_are_private_size_limited_and_can_belong_to_comment(): void
+    public function test_comment_create_and_edit_persist_attachments_on_the_comment(): void
     {
         Storage::fake('local');
         $project = $this->project();
         $taskId = $this->postJson('/api/tasks', $this->taskPayload($project))->assertCreated()->json('id');
-        $commentId = $this->postJson('/api/tasks/'.$taskId.'/comments', ['body' => 'نظر فایل‌دار'])->assertCreated()->json('id');
+
+        $comment = $this->post('/api/tasks/'.$taskId.'/comments', [
+            'body' => 'نظر فایل‌دار',
+            'files' => [UploadedFile::fake()->create('first.txt', 2, 'text/plain')],
+        ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('attachments.0.original_name', 'first.txt')
+            ->json();
+
+        $this->getJson('/api/tasks/'.$taskId)
+            ->assertOk()
+            ->assertJsonPath('comments.0.attachments.0.original_name', 'first.txt');
+
+        $this->post('/api/comments/'.$comment['id'], [
+            'body' => 'نظر ویرایش‌شده',
+            'files' => [UploadedFile::fake()->create('second.txt', 2, 'text/plain')],
+        ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('body', 'نظر ویرایش‌شده')
+            ->assertJsonCount(2, 'attachments')
+            ->assertJsonPath('attachments.1.original_name', 'second.txt');
+
+        $this->assertDatabaseCount('attachments', 2);
+        $this->deleteJson('/api/comments/'.$comment['id'])->assertNoContent();
+        $this->assertDatabaseCount('attachments', 0);
+        Storage::disk('local')->assertDirectoryEmpty('attachments');
+    }
+
+    public function test_attachments_are_private_and_size_limited(): void
+    {
+        Storage::fake('local');
+        $project = $this->project();
+        $taskId = $this->postJson('/api/tasks', $this->taskPayload($project))->assertCreated()->json('id');
         $attachmentId = $this->postJson('/api/tasks/'.$taskId.'/attachments', [
             'file' => UploadedFile::fake()->create('note.txt', 2, 'text/plain'),
-            'comment_id' => $commentId,
-        ])->assertCreated()->assertJsonPath('comment_id', $commentId)->assertJsonMissingPath('path')->json('id');
+        ])->assertCreated()->assertJsonMissingPath('path')->json('id');
 
         $this->get('/attachments/'.$attachmentId)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
         $this->postJson('/api/tasks/'.$taskId.'/attachments', ['file' => UploadedFile::fake()->create('large.txt', 5121, 'text/plain')])->assertUnprocessable()->assertJsonValidationErrors('file');
         $other = Member::create(['name' => 'همکار فایل', 'job_title' => 'طراح']);
+        $this->actingAs($other)->postJson('/api/tasks/'.$taskId.'/attachments', [
+            'file' => UploadedFile::fake()->create('blocked.txt', 2, 'text/plain'),
+        ])->assertForbidden();
         $this->actingAs($other)->deleteJson('/api/attachments/'.$attachmentId)->assertForbidden();
         $this->actingAs($this->member)->deleteJson('/api/attachments/'.$attachmentId)->assertNoContent();
         Storage::disk('local')->assertDirectoryEmpty('attachments');

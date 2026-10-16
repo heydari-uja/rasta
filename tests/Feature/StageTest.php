@@ -29,6 +29,20 @@ class StageTest extends WorkspaceCase
         $this->assertSame($ids, $p->memberStages()->pluck('id')->all());
     }
 
+    public function test_my_task_columns_can_be_ordered_across_projects(): void
+    {
+        $first = $this->project();
+        $second = $this->project();
+        $a = $this->postJson("/api/projects/$first->id/stages", ['title' => 'ستون پروژه اول', 'member_id' => $this->member->id, 'product_stage_id' => $first->stages()->first()->id])->assertCreated()->json('id');
+        $b = $this->postJson("/api/projects/$second->id/stages", ['title' => 'ستون پروژه دوم', 'member_id' => $this->member->id, 'product_stage_id' => $second->stages()->first()->id])->assertCreated()->json('id');
+
+        $this->putJson('/api/member-stages/order', ['ids' => [$b, $a]])->assertOk();
+
+        $this->assertDatabaseHas('member_stages', ['id' => $b, 'position' => 0]);
+        $this->assertDatabaseHas('member_stages', ['id' => $a, 'position' => 1]);
+        $this->putJson('/api/member-stages/order', ['ids' => [$a]])->assertUnprocessable();
+    }
+
     public function test_nonempty_stage_cannot_be_deleted_and_empty_one_can(): void
     {
         $p = $this->project();
@@ -53,7 +67,7 @@ class StageTest extends WorkspaceCase
         $productTarget = $p->stages()->whereKeyNot($task['product_stage_id'])->first();
 
         $this->deleteJson('/api/projects/'.$p->id.'/stages/product/'.$task['product_stage_id'], ['transfer_stage_id' => $productTarget->id])->assertNoContent();
-        $this->assertDatabaseHas('tasks', ['id' => $task['id'], 'product_stage_id' => $productTarget->id, 'member_stage_id' => null]);
+        $this->assertDatabaseHas('tasks', ['id' => $task['id'], 'product_stage_id' => $productTarget->id, 'member_stage_id' => $task['member_stage_id']]);
 
         $memberSource = $p->memberStages()->create(['member_id' => $this->member->id, 'product_stage_id' => $productTarget->id, 'name' => 'مبدأ شخصی', 'position' => 1]);
         $memberTarget = $p->memberStages()->create(['member_id' => $this->member->id, 'product_stage_id' => $productTarget->id, 'name' => 'مقصد شخصی', 'position' => 2]);
@@ -61,5 +75,27 @@ class StageTest extends WorkspaceCase
 
         $this->deleteJson('/api/projects/'.$p->id.'/stages/member/'.$memberSource->id, ['transfer_stage_id' => $memberTarget->id])->assertNoContent();
         $this->assertDatabaseHas('tasks', ['id' => $task['id'], 'member_stage_id' => $memberTarget->id, 'product_stage_id' => $productTarget->id]);
+    }
+
+    public function test_completed_tasks_do_not_block_column_deletion_and_remain_in_database(): void
+    {
+        $p = $this->project();
+        $task = $this->postJson('/api/tasks', $this->taskPayload($p))->assertCreated()->json();
+        $this->patchJson('/api/tasks/'.$task['id'].'/complete', ['completed' => true])->assertOk();
+
+        $memberStage = $p->memberStages()->create([
+            'member_id' => $this->member->id,
+            'product_stage_id' => $task['product_stage_id'],
+            'name' => 'ستون تکمیل‌شده',
+            'position' => 1,
+        ]);
+        Task::findOrFail($task['id'])->update(['member_stage_id' => $memberStage->id]);
+
+        $this->deleteJson('/api/projects/'.$p->id.'/stages/member/'.$memberStage->id)->assertNoContent();
+        $this->assertDatabaseHas('tasks', ['id' => $task['id'], 'member_stage_id' => null]);
+
+        $this->deleteJson('/api/projects/'.$p->id.'/stages/product/'.$task['product_stage_id'])->assertNoContent();
+        $this->assertDatabaseHas('tasks', ['id' => $task['id'], 'product_stage_id' => null]);
+        $this->assertNotNull(Task::findOrFail($task['id'])->completed_at);
     }
 }

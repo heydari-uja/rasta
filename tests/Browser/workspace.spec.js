@@ -62,9 +62,9 @@ test('shared gate, empty install, wizard, task workflow, desktop and mobile',asy
  const cols=await page.locator('.product-board .board-column').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().top));expect(cols[1]).toBeGreaterThan(cols[0]);
  await page.screenshot({path:'storage/browser-results/mobile-project.png',fullPage:true,animations:'disabled'});
  await page.getByRole('button',{name:'باز کردن منو'}).click();await expect(page.locator('.sidebar')).toHaveClass(/is-open/);
- await page.locator('.sidebar').getByRole('link',{name:'خانه',exact:true}).click();await expect(page.locator('.welcome-banner')).toBeVisible();
- await page.screenshot({path:'storage/browser-results/mobile-home.png',fullPage:true,animations:'disabled'});
- await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'storage/browser-results/desktop-dashboard.png',fullPage:true,animations:'disabled'});
+  await page.locator('.sidebar a[href="/tasks"]').click();await expect(page.locator('.tasks-page')).toBeVisible();
+ await page.screenshot({path:'storage/browser-results/mobile-tasks.png',fullPage:true,animations:'disabled'});
+ await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'storage/browser-results/desktop-tasks.png',fullPage:true,animations:'disabled'});
  await page.locator('.user-account').click();await page.getByRole('button',{name:'تغییر پروفایل',exact:true}).click();await expect(page.getByRole('heading',{name:'شما کی هستید؟'})).toBeVisible();
  expect(errors).toEqual([]);
 });

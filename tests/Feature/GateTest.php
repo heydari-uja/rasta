@@ -16,7 +16,8 @@ class GateTest extends TestCase
         $this->assertDatabaseCount('members', 0);
         $this->assertDatabaseCount('projects', 0);
         $this->assertDatabaseCount('labels', 0);
-        $this->get('/dashboard')->assertRedirect('/login');
+        $this->get('/tasks')->assertRedirect('/login');
+        $this->get('/dashboard')->assertNotFound();
         $this->getJson('/api/workspace')->assertUnauthorized();
         $this->get('/register')->assertNotFound();
     }
@@ -29,11 +30,11 @@ class GateTest extends TestCase
         $this->post('/login', ['password' => bin2hex(random_bytes(24))])->assertSessionHasErrors('password');
         $this->post('/login', ['password' => $secret])->assertRedirect('/profiles');
         $this->get('/profiles')->assertOk()->assertSee('شما کی هستید؟');
-        $this->post('/profiles', ['name' => 'عضو آزمون', 'job_title' => 'طراح'])->assertRedirect('/dashboard');
+        $this->post('/profiles', ['name' => 'عضو آزمون', 'job_title' => 'طراح'])->assertRedirect('/tasks');
         $this->assertAuthenticatedAs(Member::first());
         $this->post('/profile/switch')->assertRedirect('/profiles');
         $this->assertGuest();
-        $this->post('/profiles', ['member_id' => Member::first()->id])->assertRedirect('/dashboard');
+        $this->post('/profiles', ['member_id' => Member::first()->id])->assertRedirect('/tasks');
         $this->post('/logout')->assertRedirect('/login');
         $this->get('/profiles')->assertRedirect('/login');
     }

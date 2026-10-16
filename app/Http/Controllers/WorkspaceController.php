@@ -6,6 +6,7 @@ use App\Models\Attachment;
 use App\Models\Comment;
 use App\Models\Label;
 use App\Models\Member;
+use App\Models\MemberStage;
 use App\Models\Notification;
 use App\Models\Project;
 use App\Models\Task;
@@ -32,12 +33,27 @@ class WorkspaceController extends Controller
         TaskActivity::create(['task_id' => $task->id, 'member_id' => $member->id, 'type' => $type, 'old_value' => $old, 'new_value' => $new]);
     }
 
+    private function checkTaskAccess(Request $r, Task $task, bool $write = false): void
+    {
+        if ($task->project) {
+            ProjectAccess::check($task->project, $write ? 'write' : 'view');
+
+            return;
+        }
+
+        abort_unless((int) $task->owner_id === (int) $r->user()->id, 404);
+    }
+
     public function data(Request $r)
     {
         $projects = Project::with(['goal', 'stages', 'memberStages.productStage', 'members'])->withCount(['tasks', 'tasks as completed_count' => fn ($q) => $q->whereNotNull('completed_at')])->get();
-        $tasks = Task::whereIn('project_id', $projects->pluck('id'))->with(['subtasks', 'labels', 'assignee', 'memberStage'])->latest()->get();
+        $tasks = Task::where(function ($q) use ($projects, $r) {
+            $q->whereIn('project_id', $projects->pluck('id'))
+                ->orWhere(fn ($q) => $q->whereNull('project_id')->where('owner_id', $r->user()->id));
+        })->with(['subtasks', 'labels', 'assignee', 'memberStage'])->latest()->get();
+        $personalStages = MemberStage::whereNull('project_id')->where('member_id', $r->user()->id)->orderBy('position')->orderBy('id')->get();
 
-        return ['user' => $r->user(), 'projects' => $projects, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notifications' => Notification::where('member_id', $r->user()->id)->with(['author', 'task'])->latest()->limit(30)->get()];
+        return ['user' => $r->user(), 'projects' => $projects, 'personalStages' => $personalStages, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notifications' => Notification::where('member_id', $r->user()->id)->with(['author', 'task'])->latest()->limit(30)->get()];
     }
 
     public function project(Request $r)
@@ -57,6 +73,33 @@ class WorkspaceController extends Controller
         return response()->json($p, 201);
     }
 
+    public function projectRecord(Request $r, Project $project)
+    {
+        ProjectAccess::check($project, 'write');
+
+        if ($r->isMethod('delete')) {
+            $paths = Attachment::whereHas('task', fn ($q) => $q->where('project_id', $project->id))->pluck('path');
+            DB::transaction(function () use ($project) {
+                Task::where('project_id', $project->id)->delete();
+                $project->delete();
+            });
+            foreach ($paths as $path) {
+                Storage::disk('local')->delete($path);
+            }
+
+            return response()->noContent();
+        }
+
+        $v = $r->validate([
+            'name' => 'required|string|max:150',
+            'color' => 'required|regex:/^#[0-9a-fA-F]{6}$/',
+            'description' => 'nullable|string|max:2000',
+        ]);
+        $project->update($v);
+
+        return $project->fresh();
+    }
+
     public function goal(Request $r, Project $project)
     {
         ProjectAccess::check($project, 'owner');
@@ -74,7 +117,9 @@ class WorkspaceController extends Controller
             throw ValidationException::withMessages(['product_stage_id' => 'مرحله محصول را انتخاب کنید.']);
         }
         $rel = isset($v['member_id']) ? $project->memberStages()->where('member_id', $v['member_id']) : $project->stages();
-        $v['position'] = ($rel->max('position') ?? -1) + 1;
+        $v['position'] = isset($v['member_id'])
+            ? (MemberStage::where('member_id', $v['member_id'])->max('position') ?? -1) + 1
+            : ($rel->max('position') ?? -1) + 1;
 
         return response()->json($rel->create($v), 201);
     }
@@ -85,20 +130,22 @@ class WorkspaceController extends Controller
         $stage = ($kind === 'member' ? $project->memberStages() : $project->stages())->findOrFail($id);
         if ($r->isMethod('delete')) {
             if ($kind === 'member') {
-                $tasks = Task::where('member_stage_id', $stage->id);
-                if ($tasks->exists()) {
+                $activeTasks = Task::where('member_stage_id', $stage->id)->whereNull('completed_at');
+                if ($activeTasks->exists()) {
                     $v = $r->validate(['transfer_stage_id' => ['required', 'integer', Rule::exists('member_stages', 'id')->where(fn ($q) => $q->where('project_id', $project->id)->where('member_id', $stage->member_id))]]);
                     abort_if((int) $v['transfer_stage_id'] === $stage->id, 422, 'ستون مقصد باید متفاوت باشد.');
                     $target = $project->memberStages()->findOrFail($v['transfer_stage_id']);
-                    $tasks->update(['member_stage_id' => $target->id, 'product_stage_id' => $target->product_stage_id]);
+                    $activeTasks->update(['member_stage_id' => $target->id]);
                 }
+                Task::where('member_stage_id', $stage->id)->whereNotNull('completed_at')->update(['member_stage_id' => null]);
             } else {
-                $tasks = Task::where('product_stage_id', $stage->id);
-                if ($tasks->exists()) {
+                $activeTasks = Task::where('product_stage_id', $stage->id)->whereNull('completed_at');
+                if ($activeTasks->exists()) {
                     $v = $r->validate(['transfer_stage_id' => ['required', 'integer', Rule::exists('product_stages', 'id')->where('project_id', $project->id)]]);
                     abort_if((int) $v['transfer_stage_id'] === $stage->id, 422, 'ستون مقصد باید متفاوت باشد.');
-                    $tasks->update(['product_stage_id' => $v['transfer_stage_id'], 'member_stage_id' => null]);
+                    $activeTasks->update(['product_stage_id' => $v['transfer_stage_id']]);
                 }
+                Task::where('product_stage_id', $stage->id)->whereNotNull('completed_at')->update(['product_stage_id' => null]);
             }
             $stage->delete();
 
@@ -113,17 +160,58 @@ class WorkspaceController extends Controller
         return $stage;
     }
 
-    public function order(Request $r, Project $project, string $kind)
+    public function personalStage(Request $r, ?MemberStage $stage = null)
     {
-        ProjectAccess::check($project, 'write');
-        $v = $r->validate(['ids' => 'required|array|min:1', 'ids.*' => 'required|integer|distinct', 'member_id' => 'nullable|integer']);
-        $rel = $kind === 'member' ? $project->memberStages()->where('member_id', $v['member_id'] ?? 0) : $project->stages();
-        $actual = $rel->pluck('id')->sort()->values()->all();
+        if ($stage) {
+            abort_unless(is_null($stage->project_id) && (int) $stage->member_id === (int) $r->user()->id, 404);
+        }
+
+        if ($r->isMethod('delete')) {
+            $activeTasks = Task::where('member_stage_id', $stage->id)->whereNull('project_id')->whereNull('completed_at');
+            if ($activeTasks->exists()) {
+                $v = $r->validate([
+                    'transfer_stage_id' => ['required', 'integer', Rule::exists('member_stages', 'id')->where(fn ($q) => $q->whereNull('project_id')->where('member_id', $r->user()->id))],
+                ]);
+                abort_if((int) $v['transfer_stage_id'] === (int) $stage->id, 422, 'ستون مقصد باید متفاوت باشد.');
+                $target = MemberStage::whereNull('project_id')->where('member_id', $r->user()->id)->findOrFail($v['transfer_stage_id']);
+                $activeTasks->update(['member_stage_id' => $target->id, 'product_stage_id' => null, 'project_id' => null]);
+            }
+            Task::where('member_stage_id', $stage->id)->whereNull('project_id')->whereNotNull('completed_at')->update(['member_stage_id' => null]);
+            $stage->delete();
+
+            return response()->noContent();
+        }
+
+        $v = $r->validate([
+            'title' => 'required|string|max:120',
+            'description' => 'nullable|string|max:2000',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
+        ]);
+
+        if ($stage) {
+            $stage->update($v);
+
+            return $stage->fresh();
+        }
+
+        $position = (MemberStage::where('member_id', $r->user()->id)->max('position') ?? -1) + 1;
+
+        return response()->json(MemberStage::create([...$v, 'member_id' => $r->user()->id, 'project_id' => null, 'product_stage_id' => null, 'position' => $position]), 201);
+    }
+
+    public function memberStageOrder(Request $r)
+    {
+        $v = $r->validate(['ids' => 'required|array|min:1', 'ids.*' => 'required|integer|distinct']);
+        $rel = MemberStage::where('member_id', $r->user()->id);
+        $actual = (clone $rel)->pluck('id')->sort()->values()->all();
         $ids = $v['ids'];
-        sort($ids);
-        abort_unless($actual === $ids, 422, 'فهرست مراحل معتبر نیست.');
-        DB::transaction(function () use ($v, $rel) {
-            foreach ($v['ids'] as $i => $id) {
+        $sorted = $ids;
+        sort($sorted);
+        abort_unless($actual === $sorted, 422, 'فهرست ستون‌ها معتبر نیست.');
+
+        DB::transaction(function () use ($ids, $rel) {
+            foreach ($ids as $i => $id) {
                 (clone $rel)->where('id', $id)->update(['position' => $i]);
             }
         });
@@ -131,25 +219,64 @@ class WorkspaceController extends Controller
         return ['ok' => true];
     }
 
-    public function taskDetail(Task $task)
+    public function order(Request $r, Project $project, string $kind)
     {
-        ProjectAccess::check($task->project);
+        ProjectAccess::check($project, 'write');
+        $v = $r->validate(['ids' => 'required|array|min:1', 'ids.*' => 'required|integer|distinct', 'member_id' => 'nullable|integer']);
+        $rel = $kind === 'member' ? $project->memberStages()->where('member_id', $v['member_id'] ?? 0) : $project->stages();
+        $actual = (clone $rel)->pluck('id')->sort()->values()->all();
+        $sorted = $v['ids'];
+        sort($sorted);
+        abort_unless($actual === $sorted, 422, 'فهرست مراحل معتبر نیست.');
 
-        return $task->load(['subtasks', 'labels', 'comments.user', 'attachments.user', 'activities.member', 'memberStage']);
+        if ($kind === 'member') {
+            $memberId = (int) ($v['member_id'] ?? 0);
+            $global = MemberStage::where('member_id', $memberId)->orderBy('position')->orderBy('id')->get();
+            $wanted = collect($v['ids']);
+            $slots = $global->keys()->filter(fn ($index) => $wanted->contains($global[$index]->id))->values();
+            foreach ($slots as $i => $slot) {
+                $global[$slot] = MemberStage::findOrFail($v['ids'][$i]);
+            }
+            DB::transaction(function () use ($global, $memberId) {
+                foreach ($global as $i => $stage) {
+                    MemberStage::where('member_id', $memberId)->whereKey($stage->id)->update(['position' => $i]);
+                }
+            });
+        } else {
+            DB::transaction(function () use ($v, $rel) {
+                foreach ($v['ids'] as $i => $id) {
+                    (clone $rel)->where('id', $id)->update(['position' => $i]);
+                }
+            });
+        }
+
+        return ['ok' => true];
+    }
+
+    public function taskDetail(Request $r, Task $task)
+    {
+        $this->checkTaskAccess($r, $task);
+
+        return $task->load(['subtasks', 'labels', 'comments.user', 'comments.attachments.user', 'attachments.user', 'activities.member', 'memberStage']);
     }
 
     public function saveTask(Request $r, ?Task $task = null)
     {
-        $project = $task?->project ?? Project::findOrFail($r->input('project_id'));
-        ProjectAccess::check($project, 'write');
+        if ($task) {
+            $this->checkTaskAccess($r, $task, true);
+            Gate::authorize('update', $task);
+        }
         if ($r->has('owner_id') || $r->has('members')) {
             throw ValidationException::withMessages(['owner_id' => 'مسئول تسک قابل تغییر نیست.']);
         }
+
         $ownerId = $task?->created_by ?? $r->user()->id;
         $v = $r->validate([
+            'project_id' => 'nullable|integer|exists:projects,id',
             'title' => 'required|string|max:200',
             'description' => 'nullable|string|max:10000',
             'member_stage_id' => 'nullable|integer',
+            'product_stage_id' => 'nullable|integer',
             'start_date' => 'nullable|date_format:Y-m-d',
             'due_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date',
             'completed' => 'boolean',
@@ -161,48 +288,66 @@ class WorkspaceController extends Controller
             'subtasks.*.completed' => 'required|boolean',
         ]);
 
-        if (! empty($v['member_stage_id'])) {
-            $memberStage = $project->memberStages()->where('member_id', $ownerId)->find($v['member_stage_id']);
-            if (! $memberStage) {
-                throw ValidationException::withMessages(['member_stage_id' => 'مرحله انتخاب‌شده متعلق به سازنده این تسک نیست.']);
-            }
-            if (! $memberStage->product_stage_id) {
-                throw ValidationException::withMessages(['member_stage_id' => 'این مرحله شخصی به مرحله محصول متصل نیست.']);
-            }
-            $v['product_stage_id'] = $memberStage->product_stage_id;
-        } elseif ($task) {
-            $v['product_stage_id'] = $task->product_stage_id;
-        } else {
-            throw ValidationException::withMessages(['member_stage_id' => 'ابتدا یک «مرحله من» انتخاب یا همین‌جا ایجاد کنید.']);
+        $project = null;
+        if (! empty($v['project_id'])) {
+            $project = Project::findOrFail($v['project_id']);
+            ProjectAccess::check($project, 'write');
         }
 
-        $validLabels = Label::where(fn ($q) => $q->where('project_id', $project->id)->orWhere(fn ($q) => $q->whereNull('project_id')->where('member_id', $r->user()->id)))->pluck('id');
+        if ($project) {
+            if (! empty($v['member_stage_id'])) {
+                $memberStage = $project->memberStages()->where('member_id', $ownerId)->find($v['member_stage_id']);
+                if (! $memberStage) {
+                    throw ValidationException::withMessages(['member_stage_id' => 'ستون انتخاب‌شده متعلق به سازنده این تسک نیست.']);
+                }
+            } else {
+                $v['member_stage_id'] = null;
+            }
+
+            $productStageId = $v['product_stage_id'] ?? null;
+            if (! $productStageId || ! $project->stages()->whereKey($productStageId)->exists()) {
+                throw ValidationException::withMessages(['product_stage_id' => 'مرحله این تسک را از مراحل پروژه انتخاب کنید.']);
+            }
+            $v['product_stage_id'] = (int) $productStageId;
+            $validLabels = Label::where(fn ($q) => $q->where('project_id', $project->id)->orWhere(fn ($q) => $q->whereNull('project_id')->where('member_id', $r->user()->id)))->pluck('id');
+        } else {
+            $memberStage = MemberStage::whereNull('project_id')->where('member_id', $ownerId)->find($v['member_stage_id'] ?? null);
+            if (! $memberStage) {
+                throw ValidationException::withMessages(['member_stage_id' => 'برای تسک شخصی یک مرحله بدون پروژه انتخاب کنید.']);
+            }
+            $v['project_id'] = null;
+            $v['product_stage_id'] = null;
+            $validLabels = Label::whereNull('project_id')->where('member_id', $r->user()->id)->pluck('id');
+        }
+
         if (collect($v['labels'])->diff($validLabels)->isNotEmpty()) {
             throw ValidationException::withMessages(['labels' => 'برچسب انتخاب‌شده برای این تسک مجاز نیست.']);
         }
 
         $new = ! $task;
-        $before = $task ? $task->only(['title', 'start_date', 'due_date', 'product_stage_id', 'completed_at']) : [];
-        $oldStage = $task?->stage?->title;
+        $before = $task ? $task->only(['title', 'start_date', 'due_date']) : [];
 
-        $task = DB::transaction(function () use ($v, $project, $task, $r, $ownerId) {
+        $task = DB::transaction(function () use ($v, $task, $r, $ownerId) {
             $fields = collect($v)->except(['labels', 'subtasks', 'completed'])->all();
             $fields['owner_id'] = $ownerId;
             $fields['completed_at'] = ($v['completed'] ?? false) ? ($task?->completed_at ?? now()) : null;
             if ($task) {
                 $task->update($fields);
             } else {
-                $task = $project->tasks()->create([...$fields, 'created_by' => $r->user()->id]);
+                $fields['position'] = $fields['member_stage_id']
+                    ? (Task::where('member_stage_id', $fields['member_stage_id'])->max('position') ?? -1) + 1
+                    : 0;
+                $task = Task::create([...$fields, 'created_by' => $r->user()->id]);
             }
             $task->labels()->sync($v['labels']);
             $keep = [];
             foreach ($v['subtasks'] as $i => $subtask) {
-                $fields = ['title' => $subtask['title'], 'position' => $i, 'completed_at' => $subtask['completed'] ? now() : null];
+                $subFields = ['title' => $subtask['title'], 'position' => $i, 'completed_at' => $subtask['completed'] ? now() : null];
                 if (! empty($subtask['id'])) {
                     $sub = $task->subtasks()->findOrFail($subtask['id']);
-                    $sub->update($fields);
+                    $sub->update($subFields);
                 } else {
-                    $sub = $task->subtasks()->create($fields);
+                    $sub = $task->subtasks()->create($subFields);
                 }
                 $keep[] = $sub->id;
             }
@@ -211,9 +356,7 @@ class WorkspaceController extends Controller
             return $task->fresh(['stage', 'assignee']);
         });
 
-        if ($new) {
-            $this->activity($task, $r->user(), 'created', null, $task->title);
-        } else {
+        if (! $new) {
             if ($before['title'] !== $task->title) {
                 $this->activity($task, $r->user(), 'title', $before['title'], $task->title);
             }
@@ -222,52 +365,130 @@ class WorkspaceController extends Controller
                     $this->activity($task, $r->user(), $field, (string) $before[$field], (string) $task->$field);
                 }
             }
-            if ((int) $before['product_stage_id'] !== (int) $task->product_stage_id) {
-                $this->activity($task, $r->user(), 'stage', $oldStage, $task->stage?->title);
-            }
-            $wasCompleted = ! empty($before['completed_at']);
-            $isCompleted = ! empty($task->completed_at);
-            if ($wasCompleted !== $isCompleted) {
-                $this->activity($task, $r->user(), $isCompleted ? 'completed' : 'reopened');
-            }
         }
 
         return response()->json($task->load(['subtasks', 'labels', 'activities.member', 'memberStage']), $new ? 201 : 200);
     }
 
+    public function reorderTasks(Request $r)
+    {
+        $v = $r->validate([
+            'task_id' => 'required|integer|exists:tasks,id',
+            'target_stage_id' => 'required|integer|exists:member_stages,id',
+            'target_ids' => 'required|array|min:1',
+            'target_ids.*' => 'required|integer|distinct',
+            'source_ids' => 'present|array',
+            'source_ids.*' => 'required|integer|distinct',
+        ]);
+
+        $task = Task::where('owner_id', $r->user()->id)->findOrFail($v['task_id']);
+        Gate::authorize('update', $task);
+        $this->checkTaskAccess($r, $task, true);
+
+        $target = MemberStage::where('member_id', $r->user()->id)->findOrFail($v['target_stage_id']);
+        $sourceStageId = $task->member_stage_id;
+
+        $targetCurrent = Task::where('owner_id', $r->user()->id)
+            ->where('member_stage_id', $target->id)
+            ->orderBy('position')->orderBy('id')->pluck('id')->all();
+
+        if ((int) $sourceStageId === (int) $target->id) {
+            $expectedTarget = $targetCurrent;
+            $expectedSource = $targetCurrent;
+        } else {
+            $expectedTarget = [...$targetCurrent, $task->id];
+            $expectedSource = $sourceStageId
+                ? Task::where('owner_id', $r->user()->id)->where('member_stage_id', $sourceStageId)->whereKeyNot($task->id)->pluck('id')->all()
+                : [];
+        }
+
+        $sorted = function (array $ids): array {
+            sort($ids);
+
+            return $ids;
+        };
+        abort_unless($sorted($expectedTarget) === $sorted($v['target_ids']), 422, 'ترتیب تسک‌های ستون مقصد معتبر نیست.');
+        abort_unless($sorted($expectedSource) === $sorted($v['source_ids']), 422, 'ترتیب تسک‌های ستون مبدأ معتبر نیست.');
+
+        $targetProject = null;
+        if ($target->project_id) {
+            $targetProject = Project::findOrFail($target->project_id);
+            ProjectAccess::check($targetProject, 'write');
+            abort_unless($target->product_stage_id, 422, 'مرحله مقصد به مرحله محصول متصل نیست.');
+        }
+
+        DB::transaction(function () use ($r, $task, $target, $targetProject, $v, $sourceStageId) {
+            $projectChanged = (int) ($task->project_id ?? 0) !== (int) ($targetProject?->id ?? 0);
+            $productStageId = null;
+            if ($targetProject) {
+                $productStageId = $projectChanged
+                    ? $targetProject->stages()->orderBy('position')->value('id')
+                    : $task->product_stage_id;
+                abort_unless($productStageId, 422, 'پروژه مقصد هنوز مرحله‌ای ندارد.');
+            }
+            $task->update([
+                'project_id' => $targetProject?->id,
+                'product_stage_id' => $productStageId,
+                'member_stage_id' => $target->id,
+            ]);
+
+            if ($projectChanged) {
+                $allowed = Label::where(function ($q) use ($targetProject, $r) {
+                    if ($targetProject) {
+                        $q->where('project_id', $targetProject->id)
+                            ->orWhere(fn ($q) => $q->whereNull('project_id')->where('member_id', $r->user()->id));
+                    } else {
+                        $q->whereNull('project_id')->where('member_id', $r->user()->id);
+                    }
+                })->pluck('id');
+                $kept = $task->labels()->pluck('labels.id')->intersect($allowed)->values()->all();
+                $task->labels()->sync($kept);
+            }
+
+            foreach ($v['target_ids'] as $i => $id) {
+                Task::where('owner_id', $r->user()->id)->whereKey($id)->update([
+                    'member_stage_id' => $target->id,
+                    'position' => $i,
+                ]);
+            }
+
+            if ((int) $sourceStageId !== (int) $target->id) {
+                foreach ($v['source_ids'] as $i => $id) {
+                    Task::where('owner_id', $r->user()->id)->where('member_stage_id', $sourceStageId)->whereKey($id)->update(['position' => $i]);
+                }
+            }
+        });
+
+        return $task->fresh(['memberStage', 'stage', 'labels']);
+    }
+
     public function moveTaskStage(Request $r, Task $task)
     {
-        ProjectAccess::check($task->project, 'write');
+        $this->checkTaskAccess($r, $task, true);
+        Gate::authorize('update', $task);
+        abort_unless($task->project, 422, 'تسک شخصی مرحله محصول ندارد.');
         $v = $r->validate([
             'product_stage_id' => ['required', 'integer', Rule::exists('product_stages', 'id')->where('project_id', $task->project_id)],
         ]);
-        $oldStage = $task->stage?->title;
         $task->update(['product_stage_id' => $v['product_stage_id']]);
-        if ($task->member_stage_id && $task->memberStage?->product_stage_id !== (int) $v['product_stage_id']) {
-            $task->update(['member_stage_id' => null]);
-        }
-        $task->load('stage');
-        $this->activity($task, $r->user(), 'stage', $oldStage, $task->stage?->title);
 
         return $task->fresh(['memberStage', 'stage']);
     }
 
     public function complete(Request $r, Task $task)
     {
-        ProjectAccess::check($task->project, 'write');
+        $this->checkTaskAccess($r, $task, true);
+        Gate::authorize('update', $task);
         $v = $r->validate(['completed' => 'required|boolean']);
-        $wasCompleted = (bool) $task->completed_at;
         $task->update(['completed_at' => $v['completed'] ? now() : null]);
-        if ($wasCompleted !== (bool) $task->completed_at) {
-            $this->activity($task, $r->user(), $task->completed_at ? 'completed' : 'reopened');
-        }
 
         return $task;
     }
 
-    public function removeTask(Task $task)
+    public function removeTask(Request $r, Task $task)
     {
-        ProjectAccess::check($task->project, 'write');
+        $this->checkTaskAccess($r, $task, true);
+        Gate::authorize('delete', $task);
         foreach ($task->attachments as $a) {
             Storage::disk('local')->delete($a->path);
         }
@@ -306,9 +527,34 @@ class WorkspaceController extends Controller
 
     public function comment(Request $r, Task $task)
     {
-        ProjectAccess::check($task->project, 'write');
-        $v = $r->validate(['body' => 'required|string|max:5000']);
-        $c = $task->comments()->create([...$v, 'member_id' => $r->user()->id]);
+        $this->checkTaskAccess($r, $task, true);
+        $v = $r->validate([
+            'body' => 'required|string|max:5000',
+            'files' => 'sometimes|array|max:20',
+            'files.*' => 'file|max:5120|mimes:pdf,png,jpg,jpeg,webp,txt|extensions:pdf,png,jpg,jpeg,webp,txt',
+        ]);
+
+        $c = DB::transaction(function () use ($r, $task, $v) {
+            $comment = $task->comments()->create([
+                'body' => $v['body'],
+                'member_id' => $r->user()->id,
+            ]);
+            foreach ($r->file('files', []) as $file) {
+                $path = $file->store('attachments', 'local');
+                $comment->attachments()->create([
+                    'task_id' => $task->id,
+                    'member_id' => $r->user()->id,
+                    'original_name' => mb_substr(basename($file->getClientOriginalName()), 0, 200),
+                    'file_name' => basename($path),
+                    'mime' => $file->getMimeType(),
+                    'size' => $file->getSize(),
+                    'path' => $path,
+                ]);
+            }
+
+            return $comment;
+        });
+
         if ($task->owner_id && $task->owner_id !== $r->user()->id) {
             Notification::create([
                 'member_id' => $task->owner_id,
@@ -319,32 +565,57 @@ class WorkspaceController extends Controller
             ]);
         }
 
-        return response()->json($c->load('user'), 201);
+        return response()->json($c->load(['user', 'attachments.user']), 201);
     }
 
     public function editComment(Request $r, Comment $comment)
     {
-        ProjectAccess::check($comment->task->project, 'write');
+        $this->checkTaskAccess($r, $comment->task, true);
         Gate::authorize($r->isMethod('delete') ? 'delete' : 'update', $comment);
         if ($r->isMethod('delete')) {
+            foreach ($comment->attachments as $attachment) {
+                Storage::disk('local')->delete($attachment->path);
+            }
             $comment->delete();
 
             return response()->noContent();
         }
-        $comment->update($r->validate(['body' => 'required|string|max:5000']));
 
-        return $comment;
+        $v = $r->validate([
+            'body' => 'required|string|max:5000',
+            'files' => 'sometimes|array|max:20',
+            'files.*' => 'file|max:5120|mimes:pdf,png,jpg,jpeg,webp,txt|extensions:pdf,png,jpg,jpeg,webp,txt',
+        ]);
+        $comment->update(['body' => $v['body']]);
+        foreach ($r->file('files', []) as $file) {
+            $path = $file->store('attachments', 'local');
+            $comment->attachments()->create([
+                'task_id' => $comment->task_id,
+                'member_id' => $r->user()->id,
+                'original_name' => mb_substr(basename($file->getClientOriginalName()), 0, 200),
+                'file_name' => basename($path),
+                'mime' => $file->getMimeType(),
+                'size' => $file->getSize(),
+                'path' => $path,
+            ]);
+        }
+
+        return $comment->fresh()->load(['user', 'attachments.user']);
     }
 
     public function upload(Request $r, Task $task)
     {
-        ProjectAccess::check($task->project, 'write');
+        $this->checkTaskAccess($r, $task, true);
         $v = $r->validate([
             'file' => 'required|file|max:5120|mimes:pdf,png,jpg,jpeg,webp,txt|extensions:pdf,png,jpg,jpeg,webp,txt',
             'comment_id' => 'nullable|integer',
         ]);
         if (! empty($v['comment_id'])) {
-            abort_unless($task->comments()->whereKey($v['comment_id'])->exists(), 422, 'نظر انتخاب‌شده معتبر نیست.');
+            $comment = $task->comments()->find($v['comment_id']);
+            abort_unless($comment, 422, 'نظر انتخاب‌شده معتبر نیست.');
+            abort_unless((int) $comment->member_id === (int) $r->user()->id, 403);
+        } else {
+            Gate::authorize('update', $task);
         }
         $f = $r->file('file');
         $path = $f->store('attachments', 'local');
@@ -360,16 +631,16 @@ class WorkspaceController extends Controller
         ])->load('user'), 201);
     }
 
-    public function download(Attachment $attachment)
+    public function download(Request $r, Attachment $attachment)
     {
-        ProjectAccess::check($attachment->task->project);
+        $this->checkTaskAccess($r, $attachment->task);
 
         return Storage::disk('local')->download($attachment->path, $attachment->original_name, ['X-Content-Type-Options' => 'nosniff']);
     }
 
     public function removeAttachment(Request $r, Attachment $attachment)
     {
-        ProjectAccess::check($attachment->task->project, 'write');
+        $this->checkTaskAccess($r, $attachment->task, true);
         Gate::authorize('delete', $attachment);
         Storage::disk('local')->delete($attachment->path);
         $attachment->delete();
