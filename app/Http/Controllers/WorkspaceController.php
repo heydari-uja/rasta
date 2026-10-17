@@ -50,7 +50,7 @@ class WorkspaceController extends Controller
         $tasks = Task::where(function ($q) use ($projects, $r) {
             $q->whereIn('project_id', $projects->pluck('id'))
                 ->orWhere(fn ($q) => $q->whereNull('project_id')->where('owner_id', $r->user()->id));
-        })->with(['subtasks', 'labels', 'assignee', 'memberStage'])->latest()->get();
+        })->with(['subtasks', 'labels', 'assignee', 'creator', 'memberStage'])->latest()->get();
         $personalStages = MemberStage::whereNull('project_id')->where('member_id', $r->user()->id)->orderBy('position')->orderBy('id')->get();
 
         return ['user' => $r->user(), 'projects' => $projects, 'personalStages' => $personalStages, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notifications' => Notification::where('member_id', $r->user()->id)->with(['author', 'task'])->latest()->limit(30)->get()];
@@ -58,12 +58,12 @@ class WorkspaceController extends Controller
 
     public function project(Request $r)
     {
-        $v = $r->validate(['name' => 'required|string|max:150', 'color' => 'required|regex:/^#[0-9a-fA-F]{6}$/', 'description' => 'nullable|string|max:2000', 'goal' => 'required|array:title,description,success_criterion,start_date,target_date', 'goal.title' => 'required|string|max:200', 'goal.description' => 'nullable|string|max:3000', 'goal.success_criterion' => 'required|string|max:3000', 'goal.start_date' => 'required|date_format:Y-m-d', 'goal.target_date' => 'required|date_format:Y-m-d|after_or_equal:goal.start_date', 'stages' => 'required|array|min:1|max:30', 'stages.*' => 'array:title,description,start_date,end_date', 'stages.*.title' => 'required|string|max:120', 'stages.*.description' => 'nullable|string|max:2000', 'stages.*.start_date' => 'nullable|date_format:Y-m-d', 'stages.*.end_date' => 'nullable|date_format:Y-m-d|after_or_equal:stages.*.start_date']);
+        $v = $r->validate(['name' => 'required|string|max:150', 'color' => 'required|regex:/^#[0-9a-fA-F]{6}$/', 'description' => 'nullable|string|max:2000', 'goal' => 'required|array:title,description,success_criterion,start_date,target_date', 'goal.title' => 'required|string|max:200', 'goal.description' => 'nullable|string|max:3000', 'goal.success_criterion' => 'required|string|max:3000', 'goal.start_date' => 'required|date_format:Y-m-d', 'goal.target_date' => 'required|date_format:Y-m-d|after_or_equal:goal.start_date', 'stages' => 'sometimes|array|max:30', 'stages.*' => 'array:title,description,start_date,end_date', 'stages.*.title' => 'required|string|max:120', 'stages.*.description' => 'nullable|string|max:2000', 'stages.*.start_date' => 'nullable|date_format:Y-m-d', 'stages.*.end_date' => 'nullable|date_format:Y-m-d|after_or_equal:stages.*.start_date']);
         $p = DB::transaction(function () use ($v, $r) {
             $p = Project::create(['name' => $v['name'], 'description' => $v['description'] ?? null, 'created_by' => $r->user()->id, 'color' => $v['color']]);
             $p->members()->attach($r->user()->id);
             $p->goal()->create($v['goal']);
-            foreach ($v['stages'] as $i => $s) {
+            foreach ($v['stages'] ?? [] as $i => $s) {
                 $p->stages()->create([...$s, 'position' => $i]);
             }
 
@@ -353,7 +353,7 @@ class WorkspaceController extends Controller
             }
             $task->subtasks()->whereNotIn('id', $keep)->delete();
 
-            return $task->fresh(['stage', 'assignee']);
+            return $task->fresh(['stage', 'assignee', 'creator']);
         });
 
         if (! $new) {

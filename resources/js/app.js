@@ -32,6 +32,8 @@ import {
     Pencil,
     Target,
     Sun,
+    Moon,
+    Monitor,
     ArrowUpRight,
     CheckCircle2,
     Upload,
@@ -72,6 +74,8 @@ const icons = {
     Pencil,
     Target,
     Sun,
+    Moon,
+    Monitor,
     ArrowUpRight,
     CheckCircle2,
     Upload,
@@ -273,6 +277,7 @@ Alpine.data("workspace", () => ({
     taskSaving: false,
     expandedSubtasks: JSON.parse(localStorage.getItem("rasta-subtasks-open") || "{}"),
     account: {},
+    avatarUploading: false,
     theme: localStorage.getItem("rasta-theme") || "system",
     async init() {
         this.applyTheme();
@@ -293,6 +298,11 @@ Alpine.data("workspace", () => ({
             }
 
         });
+        document.addEventListener("pointerdown", (e) => {
+            if (!(e.target instanceof Element) || !e.target.closest(".sidebar-notification")) {
+                this.notificationsOpen = false;
+            }
+        }, true);
         window.addEventListener("beforeunload", (e) => {
             if (this.isDirty()) {
                 e.preventDefault();
@@ -397,7 +407,8 @@ Alpine.data("workspace", () => ({
     applyTheme() {
         const dark = this.theme === "dark" || (this.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
         document.documentElement.classList.toggle("dark", dark);
-        document.documentElement.dataset.theme = this.theme;
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        document.documentElement.dataset.themePreference = this.theme;
     },
     setTheme(theme) {
         this.theme = theme;
@@ -454,10 +465,19 @@ Alpine.data("workspace", () => ({
         );
     },
     color(id) {
-        return [`var(--avatar-1)`, `var(--avatar-2)`, `var(--avatar-3)`, `var(--avatar-4)`][Number(id) % 4];
+        return `var(--color-sys-data-category-${(Number(id) % 4) + 1}-bg)`;
+    },
+    colorToken(path) {
+        return getComputedStyle(document.documentElement).getPropertyValue(`--color-sys-${path}`).trim();
+    },
+    labelColorPalette() {
+        return Array.from({ length: 12 }, (_, index) => this.colorToken(`data-label-palette-${index + 1}`));
+    },
+    projectColorPalette() {
+        return Array.from({ length: 12 }, (_, index) => this.colorToken(`data-project-palette-${index + 1}`));
     },
     stageColor(i) {
-        return `var(--stage-${(i % 5) + 1})`;
+        return `var(--color-sys-data-category-${(i % 5) + 1}-solid)`;
     },
     myStages(project) {
         return (project?.member_stages || []).filter((s) => s.member_id === this.user.id);
@@ -951,7 +971,8 @@ Alpine.data("workspace", () => ({
     },
     fail(e) {
         this.errors = e.errors || {};
-        this.notify(e.message || "ذخیره انجام نشد. دوباره تلاش کنید.", true);
+        const validationMessages = Object.values(this.errors).flat().filter(Boolean);
+        this.notify(validationMessages.join(" · ") || e.message || "ذخیره انجام نشد. دوباره تلاش کنید.", true, 6500);
     },
     err(k) {
         return (this.errors[k]?.[0] || "").replace(/[0-9]/g,d=>"۰۱۲۳۴۵۶۷۸۹"[d]);
@@ -1174,8 +1195,27 @@ Alpine.data("workspace", () => ({
         return this.myStageColumns.find((stage) => stage.id == this.taskForm.member_stage_id) || null;
     },
     async saveTask() {
-        this.busy = true;
+        if (this.busy || this.taskSaving) return;
         this.errors = {};
+        const missing = [];
+        if (!String(this.taskForm.title || "").trim()) {
+            this.errors.title = ["نام تسک را وارد کنید."];
+            missing.push("نام تسک وارد نشده است");
+        }
+        if (this.formProject && !this.taskForm.product_stage_id) {
+            this.errors.product_stage_id = ["مرحله پروژه را انتخاب کنید."];
+            missing.push("مرحله پروژه انتخاب نشده است");
+        } else if (!this.formProject && !this.taskForm.member_stage_id) {
+            this.errors.member_stage_id = ["مرحله شخصی را انتخاب کنید."];
+            missing.push("مرحله شخصی انتخاب نشده است");
+        }
+        if (missing.length) {
+            this.notify("تسک ثبت نشد: " + missing.join("؛ ") + ".", true, 6500);
+            const selector = !String(this.taskForm.title || "").trim() ? ".task-title-editor" : ".task-project-trigger";
+            this.$nextTick(() => this.$refs.modalPanel?.querySelector(selector)?.focus());
+            return;
+        }
+        this.busy = true;
         try {
             const id = this.taskForm.id;
             const result = await this.api(
@@ -1319,7 +1359,7 @@ Alpine.data("workspace", () => ({
         try {
             const l = await this.api("/labels", "POST", {
                 name,
-                color: "#d9693a",
+                color: this.colorToken("data-label-palette-1"),
                 project_id: this.taskForm.project_id,
             });
             this.labels.push(l);
@@ -1446,7 +1486,7 @@ Alpine.data("workspace", () => ({
         this.projectEditForm = {
             name: project.name || "",
             description: project.description || "",
-            color: project.color || "#d29268",
+            color: project.color || this.colorToken("data-project-default"),
         };
         this.showModal("projectEdit");
     },
@@ -1490,7 +1530,7 @@ Alpine.data("workspace", () => ({
     openProject() {
         this.projectStep = 1;
         this.projectForm = {
-            color: "#d29268",
+            color: this.colorToken("data-project-default"),
             name: "",
             description: "",
             goal: {
@@ -1500,17 +1540,16 @@ Alpine.data("workspace", () => ({
                 start_date: today(),
                 target_date: today(),
             },
-            stages: [],
         };
         this.showModal("project");
     },
-    nextStep() {
+    validateProjectStep(step = this.projectStep) {
         this.errors = {};
-        if (this.projectStep === 1 && !this.projectForm.name.trim()) {
+        if (step === 1 && !this.projectForm.name.trim()) {
             this.errors = { name: ["نام پروژه را وارد کنید."] };
-            return;
+            return false;
         }
-        if (this.projectStep === 2) {
+        if (step === 2) {
             for (const key of [
                 "title",
                 "success_criterion",
@@ -1526,11 +1565,28 @@ Alpine.data("workspace", () => ({
                 this.errors["goal.target_date"] = [
                     "تاریخ پایان باید بعد از شروع باشد.",
                 ];
-            if (Object.keys(this.errors).length) return;
+            if (Object.keys(this.errors).length) return false;
         }
+        return true;
+    },
+    nextStep() {
+        if (this.projectStep >= 2 || !this.validateProjectStep()) return;
         this.projectStep++;
     },
+    goProjectStep(step) {
+        const target = Math.max(1, Math.min(2, Number(step)));
+        if (target <= this.projectStep) {
+            this.errors = {};
+            this.projectStep = target;
+            return;
+        }
+        while (this.projectStep < target) {
+            if (!this.validateProjectStep()) return;
+            this.projectStep++;
+        }
+    },
     async saveProject() {
+        if (!this.validateProjectStep(2)) return;
         this.busy = true;
         try {
             const p = await this.api("/projects", "POST", this.projectForm);
@@ -1705,7 +1761,7 @@ Alpine.data("workspace", () => ({
     openLabel(l = null) {
         this.labelForm = l
             ? clone(l)
-            : { name: "", color: "#ed8555", description: "", project_id: null };
+            : { name: "", color: this.colorToken("data-label-palette-1"), description: "", project_id: null };
         this.showModal("label");
     },
     async saveLabel() {
@@ -1755,6 +1811,65 @@ Alpine.data("workspace", () => ({
         } finally {
             this.busy = false;
         }
+    },
+    async uploadAvatar(file) {
+        if (!file || this.avatarUploading) return;
+        const extensions = ["jpg", "jpeg", "png", "webp"];
+        const mimeTypes = ["image/jpeg", "image/png", "image/webp"];
+        const extension = file.name?.split(".").pop()?.toLowerCase();
+        if (!extensions.includes(extension) || (file.type && !mimeTypes.includes(file.type))) {
+            this.notify("فقط تصویرهای JPG، PNG یا WebP پذیرفته می‌شوند.", true);
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            this.notify("حجم تصویر باید حداکثر ۲ مگابایت باشد.", true);
+            return;
+        }
+
+        this.avatarUploading = true;
+        try {
+            const data = new FormData();
+            data.append("avatar", file);
+            await this.api("/settings/avatar", "POST", data);
+            await this.refresh();
+            this.notify("عکس پروفایل به‌روزرسانی شد.");
+        } catch (e) {
+            this.notify(e.errors?.avatar?.[0] || e.message || "آپلود عکس انجام نشد. دوباره تلاش کنید.", true);
+        } finally {
+            this.avatarUploading = false;
+        }
+    },
+    async removeAvatar() {
+        if (this.avatarUploading) return;
+        this.avatarUploading = true;
+        try {
+            await this.api("/settings/avatar", "DELETE");
+            await this.refresh();
+            this.notify("عکس پروفایل حذف شد.");
+        } catch (e) {
+            this.fail(e);
+        } finally {
+            this.avatarUploading = false;
+        }
+    },
+    toggleSidebarNotifications() {
+        this.notificationsOpen = !this.notificationsOpen;
+        if (!this.notificationsOpen) return;
+        this.$nextTick(() => {
+            if (window.matchMedia("(max-width: 768px)").matches) return;
+            const button = this.$refs.sidebarNotificationButton;
+            const panel = this.$refs.sidebarNotificationPanel;
+            if (!button || !panel) return;
+            const buttonRect = button.getBoundingClientRect();
+            const panelHeight = Math.min(panel.scrollHeight, window.innerHeight - 32);
+            const belowSpace = window.innerHeight - buttonRect.bottom - 16;
+            const aboveSpace = buttonRect.top - 16;
+            let top;
+            if (belowSpace >= panelHeight) top = buttonRect.bottom + 8;
+            else if (aboveSpace >= panelHeight) top = buttonRect.top - panelHeight - 8;
+            else top = Math.max(16, Math.min(buttonRect.top - panelHeight - 8, window.innerHeight - panelHeight - 16));
+            panel.style.setProperty("--sidebar-notification-top", `${top}px`);
+        });
     },
     async readNotifications() {
         try {

@@ -3,9 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite",
-    "test:browser": "node scripts/browser-tests.mjs"
+    "build": "npm run tokens:build && vite build --configLoader runner",
+    "dev": "concurrently -k -n tokens,vite \"node scripts/watch-color-tokens.mjs\" \"vite\"",
+    "test:browser": "node scripts/browser-tests.mjs",
+    "tokens:build": "node scripts/build-color-tokens.mjs",
+    "tokens:watch": "node scripts/watch-color-tokens.mjs",
+    "tokens:check": "node scripts/build-color-tokens.mjs --check"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",

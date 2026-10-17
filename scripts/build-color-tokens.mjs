@@ -1,0 +1,122 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = path.resolve(import.meta.dirname, '..');
+const source = (name) => JSON.parse(fs.readFileSync(path.join(root, 'tokens/color', name), 'utf8'));
+const reference = source('reference.json');
+const modes = { light: source('semantic.light.json'), dark: source('semantic.dark.json') };
+const output = path.join(root, 'resources/css/color-tokens.generated.css');
+
+function flatten(node, prefix = '', result = {}) {
+  for (const [key, value] of Object.entries(node)) {
+    if (key === '$type') continue;
+    const name = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === 'object' && '$value' in value) result[name] = value.$value;
+    else if (value && typeof value === 'object') flatten(value, name, result);
+    else throw new Error(`Invalid token: ${name}`);
+  }
+  return result;
+}
+
+const refs = flatten(reference);
+const semantic = Object.fromEntries(Object.entries(modes).map(([mode, tree]) => [mode, flatten(tree)]));
+const keys = Object.keys(semantic.light).sort();
+if (keys.join('\n') !== Object.keys(semantic.dark).sort().join('\n')) {
+  throw new Error('Light and dark semantic token schemas differ');
+}
+for (const [name, value] of Object.entries(refs)) {
+  if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(value) && value !== 'transparent') {
+    throw new Error(`Reference ${name} must be a literal color`);
+  }
+}
+for (const [mode, tokens] of Object.entries(semantic)) {
+  for (const [name, value] of Object.entries(tokens)) {
+    const alias = /^\{(color\.ref\.[\w.-]+)\}$/.exec(value);
+    if (!alias || !(alias[1] in refs)) throw new Error(`Invalid ${mode} alias ${name}: ${value}`);
+  }
+}
+
+const cssName = (name) => `--${name.replaceAll('.', '-')}`;
+const resolve = (mode, name) => refs[semantic[mode][`color.sys.${name}`].slice(1, -1)];
+const appCss = fs.readFileSync(path.join(root, 'resources/css/app.css'), 'utf8');
+const consumed = appCss.match(/--color-sys-[\w-]+/g) || [];
+const available = new Set(keys.map(cssName));
+for (const token of new Set(consumed)) {
+  if (!available.has(token)) throw new Error(`Unknown semantic token in app.css: ${token}`);
+}
+if (/#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(|var\(--color-ref-/i.test(appCss)) {
+  throw new Error('app.css contains a literal color or direct reference token; use color.sys');
+}
+const luminance = (hex) => {
+  const channels = hex.slice(1).match(/../g).map((item) => parseInt(item, 16) / 255);
+  const linear = channels.map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+};
+const contrast = (a, b) => {
+  const x = luminance(a), y = luminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+
+const pairs = [
+  ['fg.default', 'bg.canvas', 4.5],
+  ['fg.default', 'bg.surface', 4.5],
+  ['fg.default', 'bg.raised', 4.5],
+  ['fg.muted', 'bg.surface', 4.5],
+  ['fg.muted', 'bg.canvas', 4.5],
+  ['fg.default', 'bg.field', 4.5],
+  ['fg.brand', 'bg.surface', 4.5],
+  ['selection.fg', 'selection.bg.default', 4.5],
+  ['selection.fg', 'selection.bg.hover', 4.5],
+  ['action.neutral.solid.fg', 'action.neutral.solid.bg.default', 4.5],
+  ['action.neutral.solid.fg', 'action.neutral.solid.bg.hover', 4.5],
+  ['action.neutral.solid.fg', 'action.neutral.solid.bg.pressed', 4.5],
+  ['action.brand.solid.fg', 'action.brand.solid.bg.default', 4.5],
+  ['action.brand.solid.fg', 'action.brand.solid.bg.hover', 4.5],
+  ['action.brand.solid.fg', 'action.brand.solid.bg.pressed', 4.5],
+  ['action.danger.solid.fg', 'action.danger.solid.bg.default', 4.5],
+  ['action.danger.solid.fg', 'action.danger.solid.bg.hover', 4.5],
+  ['action.danger.solid.fg', 'action.danger.solid.bg.pressed', 4.5],
+  ['focus.ring', 'bg.surface', 3],
+  ['focus.ring', 'bg.canvas', 3],
+];
+for (const intent of ['success', 'warning', 'error', 'info']) {
+  pairs.push([`status.${intent}.fg`, `status.${intent}.surface`, 4.5]);
+  pairs.push([`status.${intent}.on-solid`, `status.${intent}.solid`, 4.5]);
+}
+const failures = [];
+for (const mode of Object.keys(modes)) {
+  for (const [fg, bg, target] of pairs) {
+    const ratio = contrast(resolve(mode, fg), resolve(mode, bg));
+    if (ratio < target) failures.push(`${mode} ${fg}/${bg}: ${ratio.toFixed(2)} < ${target}`);
+  }
+}
+const devMode = process.argv.includes('--dev');
+if (failures.length) {
+  if (devMode) console.warn(`[tokens] contrast warning (dev only):\n${failures.join('\n')}`);
+  else throw new Error(`Color contrast checks failed:\n${failures.join('\n')}`);
+}
+
+const refLines = Object.entries(refs).sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${cssName(name)}: ${value};`);
+const sysLines = (mode) => Object.entries(semantic[mode]).sort(([a], [b]) => a.localeCompare(b)).map(([name, value]) => `  ${cssName(name)}: var(${cssName(value.slice(1, -1))});`);
+const generated = [
+  '/* Generated by scripts/build-color-tokens.mjs; edit tokens/color/*.json. */',
+  ':root {',
+  '  color-scheme: light;',
+  ...refLines,
+  ...sysLines('light'),
+  '}',
+  ':root[data-theme="dark"] {',
+  '  color-scheme: dark;',
+  ...sysLines('dark'),
+  '}',
+  '',
+].join('\n');
+
+if (process.argv.includes('--check')) {
+  if (!fs.existsSync(output) || fs.readFileSync(output, 'utf8') !== generated) {
+    throw new Error('Generated color CSS is out of date. Run npm run tokens:build.');
+  }
+} else {
+  fs.writeFileSync(output, generated);
+}
+console.log(`${keys.length} semantic colors per theme; ${pairs.length * 2} contrast pairs checked`);

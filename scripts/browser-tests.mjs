@@ -16,6 +16,6 @@ const server=spawn(php,['-S','127.0.0.1:8010','-t','public'],{env,stdio:'ignore'
 try {
  let ready=false;for(let i=0;i<50;i++){try{const r=await fetch('http://127.0.0.1:8010/login');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}
  if(!ready)throw Error('Browser server failed');
- const child=spawn('npx',['playwright','test'],{env:{...process.env,RASTA_TEST_PASSWORD:secret},stdio:'inherit'});
- const code=await new Promise(resolve=>child.on('exit',resolve));process.exitCode=code??1;
+ const child=spawn(process.execPath,['node_modules/@playwright/test/cli.js','test'],{env:{...process.env,RASTA_TEST_PASSWORD:secret},stdio:'inherit'});
+ const code=await new Promise((resolve,reject)=>{child.on('error',reject);child.on('exit',resolve);});process.exitCode=code??1;
 } finally {server.kill('SIGTERM');rmSync(temp,{recursive:true,force:true});}

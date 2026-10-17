@@ -1,70 +1,142 @@
-import {test,expect} from '@playwright/test';
-test('shared gate, empty install, wizard, task workflow, desktop and mobile',async({page})=>{
- page.setDefaultTimeout(15000);
- const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.setViewportSize({width:1440,height:1000});
- await page.goto('/login');
- await page.locator('[name=password]').fill(process.env.RASTA_TEST_PASSWORD);
- await page.getByRole('button',{name:'ورود به فضای کار'}).click();
- await expect(page.getByRole('heading',{name:'شما کی هستید؟'})).toBeVisible();
- await expect(page.locator('.profile-choice')).toHaveCount(0);
- await page.locator('[name=name]').fill('عضو آزمون');await page.locator('[name=job_title]').fill('طراح');
- await page.getByRole('button',{name:'افزودن خودم',exact:true}).click();
- await expect(page.locator('.welcome-banner')).toBeVisible();
- expect((await page.request.post('/api/projects',{data:{}})).status()).toBe(419);
- await expect(page.locator('.stat-card strong')).toHaveText(['۰','۰','۰','۰']);
- await expect(page.locator('.project-card')).toHaveCount(0);
- await page.screenshot({path:'storage/browser-results/desktop-empty.png',fullPage:true,animations:'disabled'});
- await page.getByRole('button',{name:'شروع یک پروژه جدید'}).click();
- const dialog=page.getByRole('dialog');
- await dialog.locator('[x-model="projectForm.name"]').fill('پروژه آزمون رابط');
- await dialog.locator('[x-model="projectForm.description"]').fill('یک مسیر روشن برای همکاری تیم');
- await dialog.getByRole('button',{name:'ادامه',exact:true}).click();
- await dialog.locator('[x-model="projectForm.goal.title"]').fill('رسیدن به نتیجه قابل سنجش');
- await dialog.locator('[x-model="projectForm.goal.success_criterion"]').fill('تکمیل مسیر تعریف شده');
- await dialog.getByRole('button',{name:'ادامه',exact:true}).click();
- for(const name of ['پژوهش','طراحی','توسعه','آزمون','انتشار']){await dialog.getByRole('button',{name:'افزودن مرحله',exact:true}).click();await dialog.getByPlaceholder('نام مرحله',{exact:true}).last().fill(name);}
- await dialog.getByRole('button',{name:'ساخت پروژه',exact:true}).click();
- await expect(dialog).toBeHidden();await expect(page.locator('.product-board .board-column')).toHaveCount(5);
- await page.locator('.page-heading .primary:visible').click();
- await dialog.getByRole('textbox',{name:'عنوان تسک',exact:true}).fill('طراحی صفحه جزئیات');
- await dialog.getByRole('textbox',{name:'توضیحات تسک',exact:true}).fill('این کار را با توجه به هدف اصلی پروژه پیش می‌بریم.');
- for(const title of ['بررسی نیازمندی‌ها','آماده‌سازی نسخه اولیه','بازبینی و تحویل']){await dialog.getByRole('button',{name:'افزودن زیرتسک',exact:true}).click();await dialog.getByPlaceholder('عنوان زیرتسک').last().fill(title);}
- await dialog.getByRole('checkbox',{name:'تکمیل زیرتسک'}).first().check();
- await dialog.getByLabel('مرحله محصول',{exact:true}).selectOption({label:'طراحی'});
- await dialog.locator('.label-search').fill('طراحی');await dialog.getByRole('button',{name:'ساخت «طراحی»'}).click();
- await dialog.locator('input[type=file]').setInputFiles({name:'note.txt',mimeType:'text/plain',buffer:Buffer.from('browser attachment')});
- await dialog.getByPlaceholder('نظرتان را بنویسید...').fill('گفت‌وگوی آزمون');
- await dialog.getByRole('button',{name:'ساخت تسک',exact:true}).click();await expect(dialog).toBeHidden();
- await expect(page.locator('.task-card:visible')).toHaveCount(1);
- await page.screenshot({path:'storage/browser-results/desktop-project.png',fullPage:true,animations:'disabled'});
- await page.locator('.task-card:visible .task-title').first().click();
- await expect(dialog.getByRole('heading',{name:'ویرایش تسک'})).toBeVisible();
- await expect(dialog.getByText('گفت‌وگوی آزمون',{exact:true})).toBeVisible();
- await expect(dialog.getByRole('link',{name:'note.txt'})).toBeVisible();
- await page.screenshot({path:'storage/browser-results/desktop-task.png',animations:'disabled'});
- await dialog.getByRole('textbox',{name:'عنوان تسک',exact:true}).fill('تغییر ذخیره نشده');await page.keyboard.press('Escape');
- await expect(page.getByRole('alertdialog')).toContainText('از بستن فرم و کنار گذاشتن تغییرات مطمئن هستید؟');
- await page.getByRole('button',{name:'کنار گذاشتن',exact:true}).click();
- await page.locator('.task-card:visible .completion').click();
- await expect(page.locator('.goal-progress .progress-ring strong')).toHaveText('۱۰۰٪');
- await page.locator('.compact-select[aria-label="فیلتر تسک‌های پروژه"]').selectOption('done');await expect(page.locator('.task-card:visible')).toHaveCount(1);
- await page.locator('.task-card:visible .completion').click();await page.locator('.compact-select[aria-label="فیلتر تسک‌های پروژه"]').selectOption('active');
- await page.getByRole('textbox',{name:'جست‌وجو',exact:true}).fill('طراحی صفحه');await expect(page.locator('.search-results')).toContainText('طراحی صفحه جزئیات');
- await page.getByRole('textbox',{name:'جست‌وجو',exact:true}).fill('');
- await page.locator('.stage-column-head').nth(0).dragTo(page.locator('.board-column').nth(1));
- await expect(page.locator('.stage-column-head h3').first()).toHaveText('طراحی');
- await page.reload();await expect(page.locator('.stage-column-head h3').first()).toHaveText('طراحی');
- await page.locator('.team-card-head button').click();await dialog.locator('[x-model="stageForm.title"]').fill('قدم شخصی');await dialog.getByRole('button',{name:'ذخیره مرحله',exact:true}).click();await expect(page.locator('.team-stage')).toHaveCount(1);
- await page.setViewportSize({width:390,height:844});
- await expect(page.getByRole('button',{name:'باز کردن منو'})).toBeVisible();
- expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
- const cols=await page.locator('.product-board .board-column').evaluateAll(es=>es.map(e=>e.getBoundingClientRect().top));expect(cols[1]).toBeGreaterThan(cols[0]);
- await page.screenshot({path:'storage/browser-results/mobile-project.png',fullPage:true,animations:'disabled'});
- await page.getByRole('button',{name:'باز کردن منو'}).click();await expect(page.locator('.sidebar')).toHaveClass(/is-open/);
-  await page.locator('.sidebar a[href="/tasks"]').click();await expect(page.locator('.tasks-page')).toBeVisible();
- await page.screenshot({path:'storage/browser-results/mobile-tasks.png',fullPage:true,animations:'disabled'});
- await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'storage/browser-results/desktop-tasks.png',fullPage:true,animations:'disabled'});
- await page.locator('.user-account').click();await page.getByRole('button',{name:'تغییر پروفایل',exact:true}).click();await expect(page.getByRole('heading',{name:'شما کی هستید؟'})).toBeVisible();
- expect(errors).toEqual([]);
+import {test, expect} from '@playwright/test';
+
+async function contrastOf(page, selector) {
+  return page.locator(selector).first().evaluate(element => {
+    const {color, backgroundColor}=getComputedStyle(element);
+    const channels=value=>value.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>v/255).map(v=>v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4);
+    const luminance=value=>channels(value).reduce((sum,v,i)=>sum+v*[0.2126,0.7152,0.0722][i],0);
+    const a=luminance(color), b=luminance(backgroundColor);
+    return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+  });
+}
+
+async function expectSidebarHoverTokens(page) {
+  const expected = await page.evaluate(() => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--color-sys-bg-hover)';
+    document.body.append(probe);
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  });
+  for (const selector of ['.user-account', '.sidebar-notification-button']) {
+    const control = page.locator(selector).first();
+    await control.hover();
+    await expect(control).toHaveCSS('background-color', expected);
+  }
+  const projectRow = page.locator('.project-shortcut-wrap').first();
+  await projectRow.hover();
+  const editButton = projectRow.locator('.project-edit-btn');
+  await expect(editButton).toBeVisible();
+  await editButton.hover();
+  await expect(editButton).toHaveCSS('background-color', expected);
+}
+
+test('workspace flows and resolved color themes', async ({page}) => {
+  const errors=[];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({width:1440,height:1000});
+  await page.goto('/login');
+  await expect(page.locator('html')).toHaveAttribute('data-theme',/^(light|dark)$/);
+  await page.locator('[name=password]').fill(process.env.RASTA_TEST_PASSWORD);
+  await page.getByRole('button',{name:'ورود به فضای کار'}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme',/^(light|dark)$/);
+  await expect(page.getByRole('heading',{name:'شما کی هستید؟'})).toBeVisible();
+  await page.locator('[name=name]').fill('عضو آزمون');
+  await page.locator('[name=job_title]').fill('طراح');
+  await page.getByRole('button',{name:'افزودن خودم',exact:true}).click();
+  await expect(page.locator('.tasks-page')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'هنوز مرحله‌ای ندارید'})).toBeVisible();
+
+  await page.getByRole('button',{name:'ساخت اولین پروژه'}).click();
+  const dialog=page.getByRole('dialog');
+  const projectColorToken=await page.locator('html').evaluate(element=>getComputedStyle(element).getPropertyValue('--color-sys-data-project-default').trim());
+  await expect(dialog.locator('input[type="color"]')).toHaveValue(projectColorToken);
+  await dialog.locator('[x-model="projectForm.name"]').fill('پروژه آزمون رابط');
+  await dialog.locator('[x-model="projectForm.description"]').fill('یک مسیر روشن برای همکاری تیم');
+  await dialog.getByRole('button',{name:'ادامه',exact:true}).click();
+  await dialog.locator('[x-model="projectForm.goal.title"]').fill('رسیدن به نتیجه قابل سنجش');
+  await dialog.locator('[x-model="projectForm.goal.success_criterion"]').fill('تکمیل مسیر تعریف شده');
+  await dialog.getByRole('button',{name:'ادامه',exact:true}).click();
+  await dialog.getByRole('button',{name:'افزودن مرحله',exact:true}).click();
+  await dialog.getByPlaceholder('نام مرحله',{exact:true}).fill('طراحی');
+  await dialog.getByRole('button',{name:'ساخت پروژه',exact:true}).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.product-board .board-column')).toHaveCount(2);
+
+  await page.goto('/tasks');
+  await page.getByRole('button',{name:'افزودن ستون'}).first().click();
+  await page.locator('.task-global-add-column .ui-select-trigger').click();
+  await page.locator('.ui-select-option').filter({hasText:'بدون پروژه'}).click();
+  await page.locator('[data-inline-column-input]').fill('در دست انجام');
+  await page.locator('.column-create-actions .primary').click();
+  await expect(page.locator('.task-stage-column')).toHaveCount(1);
+  await page.locator('.task-stage-column .add-column-task').click();
+  await dialog.getByPlaceholder('نام تسک').fill('کار آزمایشی');
+  await dialog.getByRole('button',{name:'افزودن تسک',exact:true}).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.task-card:visible')).toHaveCount(1);
+  expect(await contrastOf(page,'.sidebar nav a.active')).toBeGreaterThanOrEqual(4.5);
+  expect(await contrastOf(page,'.task-card')).toBeGreaterThanOrEqual(4.5);
+
+  await page.goto('/labels');
+  await page.getByRole('button',{name:/افزودن برچسب/}).click();
+  const firstLabelColor=page.locator('.label-color-choice').first();
+  const labelColorToken=await page.evaluate(()=>{const probe=document.createElement('span');probe.style.color='var(--color-sys-data-label-palette-1)';document.body.append(probe);const color=getComputedStyle(probe).color;probe.remove();return color;});
+  await expect(firstLabelColor.locator('span')).toHaveCSS('background-color',labelColorToken);
+  await expect(page.locator('.label-color-choice')).toHaveCount(12);
+
+  await page.goto('/settings');
+  await page.getByRole('button',{name:'روشن',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+  await expectSidebarHoverTokens(page);
+  expect(await contrastOf(page,'.settings-panel')).toBeGreaterThanOrEqual(4.5);
+  expect(await contrastOf(page,'.settings-panel .button.primary')).toBeGreaterThanOrEqual(4.5);
+  await expect(page.locator('.settings-panel .button.primary')).toHaveCSS('color','rgb(255, 255, 255)');
+  await expect(page.locator('.theme-options button.selected')).toHaveAttribute('aria-pressed','true');
+  const light=await page.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor);
+  await page.getByRole('button',{name:'تاریک',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await expectSidebarHoverTokens(page);
+  expect(await contrastOf(page,'.settings-panel')).toBeGreaterThanOrEqual(4.5);
+  expect(await contrastOf(page,'.settings-panel .button.primary')).toBeGreaterThanOrEqual(4.5);
+  await expect(page.locator('.settings-panel .button.primary')).toHaveCSS('color','rgb(255, 255, 255)');
+  expect(await page.locator('.theme-settings').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe(await page.locator('.theme-options').evaluate(el=>getComputedStyle(el).backgroundColor));
+  const dark=await page.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor);
+  expect(dark).not.toBe(light);
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await page.getByRole('button',{name:'سیستم',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme-preference','system');
+  await expect(page.locator('html')).toHaveAttribute('data-theme',/^(light|dark)$/);
+
+  await page.setViewportSize({width:390,height:844});
+  await expect(page.getByRole('button',{name:'باز کردن منو'})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  expect(errors).toEqual([]);
+});
+
+test('profile avatar upload and removal', async ({page}) => {
+  const errors=[];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.setViewportSize({width:1440,height:1000});
+  await page.goto('/login');
+  await page.locator('[name=password]').fill(process.env.RASTA_TEST_PASSWORD);
+  await page.getByRole('button',{name:'ورود به فضای کار'}).click();
+  if (await page.locator('.profile-choice').count()) {
+    await page.locator('.profile-choice').first().click();
+  } else {
+    await page.locator('[name=name]').fill('عضو آزمون آواتار');
+    await page.locator('[name=job_title]').fill('طراح');
+    await page.getByRole('button',{name:'افزودن خودم',exact:true}).click();
+  }
+  await page.goto('/settings');
+  const avatar=Buffer.from(await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=2;canvas.height=2;return canvas.toDataURL('image/png').split(',')[1];}),'base64');
+  await page.locator('.avatar-settings input[type="file"]').setInputFiles({name:'avatar.png',mimeType:'image/png',buffer:avatar});
+  await expect(page.locator('.settings-panel .account-heading img')).toHaveAttribute('src',/\/avatars\/\d+/,{timeout:30000});
+  await expect(page.locator('.avatar-settings input[type="file"]')).toBeEnabled({timeout:30000});
+  await page.getByRole('button',{name:'حذف تصویر پروفایل',exact:true}).click();
+  await expect(page.locator('.settings-panel .account-heading img')).toBeHidden();
+  await expect(page.locator('.toast')).toContainText('عکس پروفایل حذف شد');
+  expect(errors).toEqual([]);
 });
