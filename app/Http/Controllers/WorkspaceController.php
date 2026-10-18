@@ -112,9 +112,16 @@ class WorkspaceController extends Controller
     {
         ProjectAccess::check($project, 'write');
         abort_unless($project->goal, 422, 'ابتدا هدف پروژه را مشخص کنید.');
-        $v = $r->validate(['title' => 'required|string|max:120', 'description' => 'nullable|string|max:2000', 'start_date' => 'nullable|date_format:Y-m-d', 'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date', 'member_id' => ['nullable', Rule::exists('project_members', 'member_id')->where('project_id', $project->id)], 'product_stage_id' => ['nullable', 'integer', Rule::exists('product_stages', 'id')->where('project_id', $project->id)]]);
-        if (isset($v['member_id']) && empty($v['product_stage_id'])) {
-            throw ValidationException::withMessages(['product_stage_id' => 'مرحله محصول را انتخاب کنید.']);
+        $v = $r->validate(['title' => 'required|string|max:120', 'description' => 'nullable|string|max:2000', 'start_date' => 'nullable|date_format:Y-m-d', 'end_date' => 'nullable|date_format:Y-m-d|after_or_equal:start_date', 'member_id' => ['nullable', 'integer', 'exists:members,id'], 'product_stage_id' => ['nullable', 'integer', Rule::exists('product_stages', 'id')->where('project_id', $project->id)]]);
+        if (isset($v['member_id'])) {
+            if ((int) $v['member_id'] !== (int) $r->user()->id) {
+                throw ValidationException::withMessages(['member_id' => 'ستون شخصی فقط برای حساب واردشده قابل ایجاد است.']);
+            }
+            if (empty($v['product_stage_id'])) {
+                throw ValidationException::withMessages(['product_stage_id' => 'مرحله محصول را انتخاب کنید.']);
+            }
+            $project->members()->syncWithoutDetaching([$r->user()->id]);
+            $v['member_id'] = $r->user()->id;
         }
         $rel = isset($v['member_id']) ? $project->memberStages()->where('member_id', $v['member_id']) : $project->stages();
         $v['position'] = isset($v['member_id'])

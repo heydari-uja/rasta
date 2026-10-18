@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Member;
 use App\Models\Task;
 use Tests\WorkspaceCase;
 
@@ -41,6 +42,28 @@ class StageTest extends WorkspaceCase
         $this->assertDatabaseHas('member_stages', ['id' => $b, 'position' => 0]);
         $this->assertDatabaseHas('member_stages', ['id' => $a, 'position' => 1]);
         $this->putJson('/api/member-stages/order', ['ids' => [$a]])->assertUnprocessable();
+    }
+
+    public function test_active_member_can_create_own_project_column_and_is_attached_to_project(): void
+    {
+        $project = $this->project();
+        $other = Member::create(['name' => 'عضو دوم', 'job_title' => 'طراح']);
+        $this->actingAs($other);
+
+        $stageId = $this->postJson("/api/projects/$project->id/stages", [
+            'title' => 'ستون عضو دوم',
+            'member_id' => $other->id,
+            'product_stage_id' => $project->stages()->first()->id,
+        ])->assertCreated()->json('id');
+
+        $this->assertDatabaseHas('project_members', ['project_id' => $project->id, 'member_id' => $other->id]);
+        $this->assertDatabaseHas('member_stages', ['id' => $stageId, 'project_id' => $project->id, 'member_id' => $other->id]);
+
+        $this->postJson("/api/projects/$project->id/stages", [
+            'title' => 'ستون جعلی',
+            'member_id' => $this->member->id,
+            'product_stage_id' => $project->stages()->first()->id,
+        ])->assertUnprocessable()->assertJsonValidationErrors('member_id');
     }
 
     public function test_nonempty_stage_cannot_be_deleted_and_empty_one_can(): void

@@ -466,6 +466,14 @@ fieldset {
     color: var(--color-sys-selection-fg);
     font-weight: 600;
 }
+.dark .sidebar nav a:hover {
+    background: var(--color-sys-bg-sunken);
+}
+.dark .sidebar nav a.active,
+.dark .sidebar nav a.active:hover {
+    background: var(--color-sys-bg-raised);
+    color: var(--color-sys-fg-brand);
+}
 .nav-count {
     margin-inline-start: auto;
     font-size: 10px;
@@ -7280,4 +7288,121 @@ select:disabled {
     }
     .tag i,
     .project-shortcut i { forced-color-adjust: none; background: CanvasText; }
+}
+
+/* Dark sidebar interaction states: keep brand as an accent, not a filled brown surface. */
+.dark .sidebar nav a:not(.active):hover {
+    background: var(--color-sys-bg-sunken);
+    color: var(--color-sys-fg-default);
+}
+.dark .sidebar nav a.active,
+.dark .sidebar nav a.active:hover,
+.dark .sidebar nav a.active:active {
+    background: var(--color-sys-bg-raised);
+    color: var(--color-sys-fg-brand);
+}
+
+/* Dark sidebar interaction states: keep a subtle brand tint instead of neutral gray. */
+.dark .sidebar nav a:not(.active):hover {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 7%, var(--color-sys-bg-sidebar));
+    color: var(--color-sys-fg-default);
+}
+.dark .sidebar nav a.active {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 14%, var(--color-sys-bg-sidebar));
+    color: var(--color-sys-fg-brand);
+}
+.dark .sidebar nav a.active:hover {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 18%, var(--color-sys-bg-sidebar));
+}
+.dark .sidebar nav a.active:active {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 22%, var(--color-sys-bg-sidebar));
+}
+
+/* Dark brand surfaces: match the selected My Tasks sidebar item. */
+.dark .sidebar-projects .project-shortcut:not(.active):hover {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 7%, var(--color-sys-bg-sidebar));
+    color: var(--color-sys-fg-default);
+}
+.dark .sidebar-projects .project-shortcut.active {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 14%, var(--color-sys-bg-sidebar));
+    color: var(--color-sys-fg-brand);
+}
+.dark .sidebar-projects .project-shortcut.active:hover {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 18%, var(--color-sys-bg-sidebar));
+    color: var(--color-sys-fg-brand);
+}
+.dark .sidebar-projects .project-shortcut.active:active {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 22%, var(--color-sys-bg-sidebar));
+}
+.dark .theme-settings {
+    border-color: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 18%, var(--color-sys-border-default));
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 7%, var(--color-sys-bg-surface));
+}
+.dark .theme-settings-icon,
+.dark .theme-picker-current-icon {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 14%, var(--color-sys-bg-surface));
+    color: var(--color-sys-fg-brand);
+}
+.dark .theme-picker-trigger {
+    border-color: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 18%, var(--color-sys-border-control));
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 7%, var(--color-sys-bg-surface));
+}
+.dark .theme-picker-trigger:hover,
+.dark .theme-picker-trigger[aria-expanded="true"] {
+    border-color: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 24%, var(--color-sys-border-default));
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 14%, var(--color-sys-bg-surface));
+}
+.dark .theme-picker-menu > button.selected {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 14%, var(--color-sys-bg-surface));
+    color: var(--color-sys-fg-brand);
+}
+.dark .settings-logout-button {
+    border-color: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 22%, var(--color-sys-border-default));
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 14%, var(--color-sys-bg-surface));
+    color: var(--color-sys-fg-brand) !important;
+}
+.dark .settings-logout-button:hover {
+    border-color: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 28%, var(--color-sys-border-default));
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 18%, var(--color-sys-bg-surface));
+}
+.dark .settings-logout-button:active {
+    background: color-mix(in srgb, var(--color-sys-action-brand-solid-bg-default) 22%, var(--color-sys-bg-surface));
+}
+
+/* Logout remains destructive in dark theme. */
+.dark .settings-logout-button {
+    border-color: color-mix(in srgb, var(--color-sys-border-error) 45%, var(--color-sys-border-default));
+    background: var(--color-sys-bg-error-subtle);
+    color: var(--color-sys-fg-error) !important;
+}
+.dark .settings-logout-button:hover {
+    border-color: var(--color-sys-border-error);
+    background: color-mix(in srgb, var(--color-sys-bg-error-subtle) 82%, var(--color-sys-bg-surface));
+}
+.dark .settings-logout-button:active {
+    background: color-mix(in srgb, var(--color-sys-bg-error-subtle) 92%, var(--color-sys-bg-surface));
+}
+
+/* Compact project task footer. */
+.task-card-footer {
+    justify-content: flex-start;
+    gap: 3px;
+}
+.task-card-footer .task-creator,
+.task-card-footer .task-project-date {
+    flex: 0 0 auto;
+}
+.task-card-footer .task-creator {
+    gap: 3px;
+}
+.task-card-footer .task-creator-avatar {
+    border: 0 !important;
+    outline: 0 !important;
+    box-shadow: none !important;
+}
+
+/* Project task footer spacing. */
+.task-card-footer {
+    gap: 8px;
 }
