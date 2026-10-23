@@ -4,7 +4,7 @@
         <span x-text="label()"></span><span x-html="$icon('CalendarDays')"></span>
     </button>
     <template x-teleport="body">
-        <div class="calendar-pop calendar-fixed calendar-surface" x-show="open" x-cloak x-transition.opacity.scale.95.duration.150ms :style="calendarStyle" @click.outside="open=false" role="dialog" aria-label="{{ $label }}">
+        <div class="calendar-pop calendar-fixed calendar-surface" x-ref="calendar" x-show="open" x-cloak x-transition.opacity.scale.95.duration.150ms :style="calendarStyle" @click.outside="open=false" @keydown.escape.stop="open=false;$refs.trigger.focus()" @resize.window="if(open)position()" @scroll.window.capture="if(open)position()" role="dialog" aria-label="{{ $label }}">
             <div class="calendar-head">
                 <button type="button" class="calendar-nav" @click="move(-1)" aria-label="ماه قبل" x-html="$icon('ChevronRight')"></button>
                 <strong x-text="heading"></strong>

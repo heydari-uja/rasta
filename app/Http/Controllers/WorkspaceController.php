@@ -11,6 +11,7 @@ use App\Models\Notification;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\TaskActivity;
+use App\Models\WorkspaceSecurity;
 use App\Services\ProjectAccess;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,16 +54,23 @@ class WorkspaceController extends Controller
         })->with(['subtasks', 'labels', 'assignee', 'creator', 'memberStage'])->latest()->get();
         $personalStages = MemberStage::whereNull('project_id')->where('member_id', $r->user()->id)->orderBy('position')->orderBy('id')->get();
 
-        return ['user' => $r->user(), 'projects' => $projects, 'personalStages' => $personalStages, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notifications' => Notification::where('member_id', $r->user()->id)->with(['author', 'task'])->latest()->limit(30)->get()];
+        $data = ['user' => $r->user(), 'projects' => $projects, 'personalStages' => $personalStages, 'tasks' => $tasks, 'labels' => $this->visibleLabels($r)->get(), 'notifications' => Notification::where('member_id', $r->user()->id)->with(['author', 'task'])->latest()->limit(30)->get()];
+        if ($r->user()->role === 'admin') {
+            $data['security'] = [
+                'member_pin_configured' => WorkspaceSecurity::query()->whereKey(1)->whereNotNull('member_pin_hash')->exists(),
+            ];
+        }
+
+        return $data;
     }
 
     public function project(Request $r)
     {
-        $v = $r->validate(['name' => 'required|string|max:150', 'color' => 'required|regex:/^#[0-9a-fA-F]{6}$/', 'description' => 'nullable|string|max:2000', 'goal' => 'required|array:title,description,success_criterion,start_date,target_date', 'goal.title' => 'required|string|max:200', 'goal.description' => 'nullable|string|max:3000', 'goal.success_criterion' => 'required|string|max:3000', 'goal.start_date' => 'required|date_format:Y-m-d', 'goal.target_date' => 'required|date_format:Y-m-d|after_or_equal:goal.start_date', 'stages' => 'sometimes|array|max:30', 'stages.*' => 'array:title,description,start_date,end_date', 'stages.*.title' => 'required|string|max:120', 'stages.*.description' => 'nullable|string|max:2000', 'stages.*.start_date' => 'nullable|date_format:Y-m-d', 'stages.*.end_date' => 'nullable|date_format:Y-m-d|after_or_equal:stages.*.start_date']);
+        $v = $r->validate(['name' => 'required|string|max:150', 'color' => 'required|in:project-marker-1,project-marker-2,project-marker-3,project-marker-4,project-marker-5,project-marker-6,project-marker-7,project-marker-8', 'description' => 'nullable|string|max:2000', 'goal' => 'required|array:title,description,success_criterion,start_date,target_date', 'goal.title' => 'required|string|max:200', 'goal.description' => 'nullable|string|max:3000', 'goal.success_criterion' => 'sometimes|string|max:3000', 'goal.start_date' => 'required|date_format:Y-m-d', 'goal.target_date' => 'required|date_format:Y-m-d|after_or_equal:goal.start_date', 'stages' => 'sometimes|array|max:30', 'stages.*' => 'array:title,description,start_date,end_date', 'stages.*.title' => 'required|string|max:120', 'stages.*.description' => 'nullable|string|max:2000', 'stages.*.start_date' => 'nullable|date_format:Y-m-d', 'stages.*.end_date' => 'nullable|date_format:Y-m-d|after_or_equal:stages.*.start_date']);
         $p = DB::transaction(function () use ($v, $r) {
             $p = Project::create(['name' => $v['name'], 'description' => $v['description'] ?? null, 'created_by' => $r->user()->id, 'color' => $v['color']]);
             $p->members()->attach($r->user()->id);
-            $p->goal()->create($v['goal']);
+            $p->goal()->create(['success_criterion' => '', ...$v['goal']]);
             foreach ($v['stages'] ?? [] as $i => $s) {
                 $p->stages()->create([...$s, 'position' => $i]);
             }
@@ -92,12 +100,22 @@ class WorkspaceController extends Controller
 
         $v = $r->validate([
             'name' => 'required|string|max:150',
-            'color' => 'required|regex:/^#[0-9a-fA-F]{6}$/',
+            'color' => 'required|in:project-marker-1,project-marker-2,project-marker-3,project-marker-4,project-marker-5,project-marker-6,project-marker-7,project-marker-8',
             'description' => 'nullable|string|max:2000',
+            'goal' => 'sometimes|array:title,success_criterion,start_date,target_date',
+            'goal.title' => 'required_with:goal|string|max:200',
+            'goal.success_criterion' => 'sometimes|string|max:3000',
+            'goal.start_date' => 'required_with:goal|date_format:Y-m-d',
+            'goal.target_date' => 'required_with:goal|date_format:Y-m-d|after_or_equal:goal.start_date',
         ]);
-        $project->update($v);
+        DB::transaction(function () use ($project, $v) {
+            $project->update(collect($v)->except('goal')->all());
+            if (isset($v['goal'])) {
+                $project->goal()->updateOrCreate(['project_id' => $project->id], $v['goal']);
+            }
+        });
 
-        return $project->fresh();
+        return $project->fresh('goal');
     }
 
     public function goal(Request $r, Project $project)
@@ -518,7 +536,7 @@ class WorkspaceController extends Controller
 
             return response()->noContent();
         }
-        $v = $r->validate(['name' => 'required|string|max:60', 'color' => 'required|regex:/^#[0-9a-fA-F]{6}$/', 'description' => 'nullable|string|max:500', 'project_id' => 'nullable|integer']);
+        $v = $r->validate(['name' => 'required|string|max:60', 'color' => 'required|in:project-marker-1,project-marker-2,project-marker-3,project-marker-4,project-marker-5,project-marker-6,project-marker-7,project-marker-8', 'description' => 'nullable|string|max:500', 'project_id' => 'nullable|integer']);
         if (! $label && isset($v['project_id'])) {
             ProjectAccess::check(Project::findOrFail($v['project_id']), 'write');
         }
@@ -698,12 +716,13 @@ class WorkspaceController extends Controller
         imagedestroy($target);
 
         $member = $r->user();
-        if ($member->avatar_path) {
-            Storage::disk('local')->delete($member->avatar_path);
-        }
+        $previousPath = $member->avatar_path;
         $path = 'avatars/'.$member->id.'-'.bin2hex(random_bytes(8)).'.webp';
-        Storage::disk('local')->put($path, $output);
+        abort_unless($output && Storage::disk('local')->put($path, $output), 500, 'ذخیره تصویر انجام نشد. دوباره تلاش کنید.');
         $member->update(['avatar_path' => $path]);
+        if ($previousPath) {
+            Storage::disk('local')->delete($previousPath);
+        }
 
         return $member->fresh();
     }

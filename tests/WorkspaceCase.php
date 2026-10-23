@@ -4,6 +4,8 @@ namespace Tests;
 
 use App\Models\Member;
 use App\Models\Project;
+use App\Models\WorkspaceSecurity;
+use App\Services\PinSecurity;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 
@@ -16,16 +18,26 @@ abstract class WorkspaceCase extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $hash = Hash::make(bin2hex(random_bytes(24)));
-        config(['uja.password_hash' => $hash]);
-        $this->withSession(['shared_access' => hash('sha256', $hash)]);
+        $hash = Hash::make('2468');
+        WorkspaceSecurity::singleton()->update([
+            'member_pin_hash' => $hash,
+            'admin_pin_configured_at' => now(),
+        ]);
+        $admin = (new Member)->forceFill([
+            'name' => 'مدیر آزمون',
+            'job_title' => 'مدیر',
+            'role' => 'admin',
+            'pin_hash' => Hash::make('8642'),
+        ]);
+        $admin->save();
+        $this->withSession(['member_pin_fingerprint' => PinSecurity::fingerprint($hash)]);
         $this->member = Member::create(['name' => 'عضو آزمون', 'job_title' => 'طراح']);
         $this->actingAs($this->member);
     }
 
     protected function payload(): array
     {
-        return ['name' => 'پروژه آزمون', 'description' => 'شرح', 'color' => '#d29268', 'goal' => ['title' => 'نتیجه روشن', 'description' => 'شرح هدف', 'success_criterion' => 'معیار قابل سنجش', 'start_date' => '2026-10-01', 'target_date' => '2026-11-01'], 'stages' => [['title' => 'مرحله اول'], ['title' => 'مرحله دوم']]];
+        return ['name' => 'پروژه آزمون', 'description' => 'شرح', 'color' => 'project-marker-1', 'goal' => ['title' => 'نتیجه روشن', 'description' => 'شرح هدف', 'success_criterion' => 'معیار قابل سنجش', 'start_date' => '2026-10-01', 'target_date' => '2026-11-01'], 'stages' => [['title' => 'مرحله اول'], ['title' => 'مرحله دوم']]];
     }
 
     protected function project(): Project

@@ -14,7 +14,7 @@ class ProjectTest extends WorkspaceCase
         $this->assertDatabaseCount('projects', 1);
         $this->assertDatabaseCount('goals', 1);
         $this->assertSame([0, 1], $p->stages->pluck('position')->all());
-        $this->assertSame('#d29268', $p->color);
+        $this->assertSame('project-marker-1', $p->color);
         $this->getJson('/api/workspace')->assertOk()->assertJsonPath('projects.0.tasks_count', 0);
     }
 
@@ -25,6 +25,15 @@ class ProjectTest extends WorkspaceCase
         $this->postJson('/api/projects', $v)->assertUnprocessable()->assertJsonValidationErrors('goal.target_date');
         $this->assertDatabaseCount('projects', 0);
         $this->assertDatabaseCount('goals', 0);
+    }
+
+    public function test_project_color_must_use_a_project_marker_token(): void
+    {
+        $payload = $this->payload();
+        $payload['color'] = 'custom-color';
+
+        $this->postJson('/api/projects', $payload)->assertUnprocessable()->assertJsonValidationErrors('color');
+        $this->assertDatabaseCount('projects', 0);
     }
 
     public function test_failure_inside_transaction_rolls_back_project_and_goal(): void
@@ -57,9 +66,9 @@ class ProjectTest extends WorkspaceCase
         $this->putJson('/api/projects/'.$p->id, [
             'name' => 'نام ویرایش‌شده',
             'description' => 'توضیح تازه',
-            'color' => '#5877b9',
+            'color' => 'project-marker-3',
         ])->assertOk()->assertJsonPath('name', 'نام ویرایش‌شده');
-        $this->assertDatabaseHas('projects', ['id' => $p->id, 'name' => 'نام ویرایش‌شده', 'color' => '#5877b9']);
+        $this->assertDatabaseHas('projects', ['id' => $p->id, 'name' => 'نام ویرایش‌شده', 'color' => 'project-marker-3']);
 
         $this->deleteJson('/api/projects/'.$p->id)->assertNoContent();
         $this->assertDatabaseMissing('projects', ['id' => $p->id]);

@@ -1,0 +1,32 @@
+{
+  "color": {
+    "$type": "color",
+    "component": {
+      "button-brand-solid-bg-default": { "$value": "{semantic.accent}" },
+      "button-brand-solid-bg-hover": { "$value": "{semantic.accent-hover}" },
+      "button-brand-solid-bg-pressed": { "$value": "{semantic.accent-hover}" },
+      "button-brand-solid-fg": { "$value": "{semantic.on-accent}" },
+      "button-brand-quiet-bg-default": { "$value": "transparent" },
+      "button-brand-quiet-bg-hover": { "$value": "{semantic.accent-surface}" },
+      "button-brand-quiet-bg-pressed": { "$value": "{semantic.accent-surface}" },
+      "button-brand-quiet-fg": { "$value": "{semantic.accent}" },
+      "button-neutral-solid-bg": { "$value": "{semantic.surface-muted}" },
+      "button-neutral-solid-border": { "$value": "{semantic.border-subtle}" },
+      "button-neutral-solid-border-hover": { "$value": "{semantic.border-strong}" },
+      "button-neutral-solid-fg": { "$value": "{semantic.text-primary}" },
+      "button-neutral-quiet-bg-default": { "$value": "transparent" },
+      "button-neutral-quiet-bg-hover": { "$value": "{semantic.surface-muted}" },
+      "button-neutral-quiet-bg-pressed": { "$value": "{semantic.surface-muted}" },
+      "button-neutral-quiet-fg": { "$value": "{semantic.text-muted}" },
+      "button-neutral-quiet-fg-hover": { "$value": "{semantic.text-primary}" },
+      "button-danger-solid-bg-default": { "$value": "{semantic.status-danger}" },
+      "button-danger-solid-bg-hover": { "$value": "{semantic.status-danger-hover}" },
+      "button-danger-solid-bg-pressed": { "$value": "{semantic.status-danger-hover}" },
+      "button-danger-solid-fg": { "$value": "{semantic.on-accent}" },
+      "field-bg": { "$value": "{semantic.surface-base}" },
+      "field-border": { "$value": "{semantic.border-strong}" },
+      "field-fg": { "$value": "{semantic.text-primary}" },
+      "field-placeholder": { "$value": "{semantic.text-muted}" }
+    }
+  }
+}

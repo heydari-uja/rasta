@@ -8,7 +8,6 @@ import {
     Tags,
     Settings,
     Plus,
-    Bell,
     ChevronLeft,
     ChevronRight,
     ChevronDown,
@@ -37,9 +36,11 @@ import {
     ArrowUpRight,
     CheckCircle2,
     Upload,
+    UserRound,
+    ShieldCheck,
     SlidersHorizontal,
     FolderOpen,
-    PanelRightClose,
+    PanelRight,
     Link,
     LoaderCircle,
 } from "lucide";
@@ -50,7 +51,6 @@ const icons = {
     Tags,
     Settings,
     Plus,
-    Bell,
     ChevronLeft,
     ChevronRight,
     ChevronDown,
@@ -79,9 +79,11 @@ const icons = {
     ArrowUpRight,
     CheckCircle2,
     Upload,
+    UserRound,
+    ShieldCheck,
     SlidersHorizontal,
     FolderOpen,
-    PanelRightClose,
+    PanelRight,
     Link,
     LoaderCircle,
 };
@@ -190,8 +192,11 @@ Alpine.data("datePicker", () => ({
         if (!rect) return;
         const width = Math.min(288, window.innerWidth - 24);
         const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.right - width));
-        const top = rect.bottom + 4;
-        this.calendarStyle = `position:fixed;top:${top}px;left:${left}px;width:${width}px`;
+        const height = Math.min(this.$refs.calendar?.offsetHeight || 350, window.innerHeight - 24);
+        const below = rect.bottom + 6;
+        const preferredTop = below + height <= window.innerHeight - 12 ? below : rect.top - height - 6;
+        const top = Math.max(12, Math.min(preferredTop, window.innerHeight - height - 12));
+        this.calendarStyle = `position:fixed;top:${top}px;left:${left}px;width:${width}px;max-height:${window.innerHeight - 24}px;overflow-y:auto`;
     },
     move(n) {
         const d = new Date(this.cursor);
@@ -213,13 +218,22 @@ Alpine.data("workspace", () => ({
     personalStages: [],
     tasks: [],
     labels: [],
-    notifications: [],
     page: "tasks",
     projectId: null,
     loading: true,
     loadError: "",
-    sidebar: false,
-    notificationsOpen: false,
+    sidebarCollapsed: (() => {
+        const saved = localStorage.getItem("rasta-sidebar-collapsed");
+        return saved === null
+            ? window.matchMedia("(max-width: 639px)").matches
+            : saved === "true";
+    })(),
+    projectsExpanded: true,
+    profileMenuOpen: false,
+    sidebarTooltipVisible: false,
+    sidebarTooltipTimer: null,
+    sidebarTooltipTarget: null,
+    sidebarTooltipStyle: "",
     view: "board",
     selectedProject: "all",
     toast: "",
@@ -275,34 +289,40 @@ Alpine.data("workspace", () => ({
     columnRenameTitle: "",
     taskAutosaveTimer: null,
     taskSaving: false,
+    taskSaveStatus: "",
     expandedSubtasks: JSON.parse(localStorage.getItem("rasta-subtasks-open") || "{}"),
     account: {},
+    security: {},
+    securityBusy: "",
+    securityDialog: "",
+    securityDialogTrigger: null,
+    settingsSection: "account",
     avatarUploading: false,
-    theme: localStorage.getItem("rasta-theme") || "system",
     async init() {
         this.applyTheme();
-        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-            if (this.theme === "system") this.applyTheme();
-        });
         document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
         await this.refresh();
         this.route();
         window.addEventListener("popstate", () => this.route());
         window.addEventListener("keydown", (e) => {
             if (e.key === "Escape") {
+                this.hideSidebarTooltip();
+                this.profileMenuOpen = false;
                 if (this.confirmBox) this.confirmBox = null;
                 else if (this.modal) this.closeModal();
-                else {
-                    this.notificationsOpen = false;
-                }
+            }
+            const target = e.target;
+            const editing = target instanceof Element && (
+                target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])") || target.isContentEditable
+            );
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && !e.repeat && !e.isComposing && e.key.toLowerCase() === "s" && !editing) {
+                e.preventDefault();
+                this.toggleSidebarCollapsed();
             }
 
         });
-        document.addEventListener("pointerdown", (e) => {
-            if (!(e.target instanceof Element) || !e.target.closest(".sidebar-notification")) {
-                this.notificationsOpen = false;
-            }
-        }, true);
+        window.addEventListener("resize", () => this.positionSidebarTooltip());
+        window.addEventListener("scroll", () => this.positionSidebarTooltip(), true);
         window.addEventListener("beforeunload", (e) => {
             if (this.isDirty()) {
                 e.preventDefault();
@@ -336,7 +356,14 @@ Alpine.data("workspace", () => ({
             window.location = "/login";
             throw { message: "لطفاً دوباره وارد شوید." };
         }
-        const result = res.status === 204 ? {} : await res.json();
+        let result = {};
+        if (res.status !== 204) {
+            try {
+                result = await res.json();
+            } catch {
+                throw { message: "پاسخ سرور معتبر نیست. لطفاً دوباره تلاش کنید." };
+            }
+        }
         if (!res.ok) throw result;
         return result;
     },
@@ -365,10 +392,40 @@ Alpine.data("workspace", () => ({
     go(page, id = null) {
         this.page = page;
         this.projectId = id;
-        this.sidebar = false;
         history.pushState({}, "", `/${page}${id ? "/" + id : ""}`);
         window.scrollTo(0, 0);
         this.$nextTick(() => this.setupTaskSortables());
+    },
+    toggleSidebarCollapsed() {
+        this.sidebarCollapsed = !this.sidebarCollapsed;
+        localStorage.setItem("rasta-sidebar-collapsed", String(this.sidebarCollapsed));
+        this.hideSidebarTooltip();
+    },
+    showSidebarTooltip(button) {
+        window.clearTimeout(this.sidebarTooltipTimer);
+        this.sidebarTooltipTarget = button;
+        this.sidebarTooltipTimer = window.setTimeout(() => {
+            if (!this.sidebarTooltipTarget?.isConnected) return;
+            this.positionSidebarTooltip();
+            this.sidebarTooltipVisible = true;
+        }, 300);
+    },
+    positionSidebarTooltip() {
+        const button = this.sidebarTooltipTarget;
+        if (!button?.isConnected) return;
+        const rect = button.getBoundingClientRect();
+        const sidebarRect = button.closest(".sidebar")?.getBoundingClientRect() || rect;
+        const rtl = window.getComputedStyle(button).direction === "rtl";
+        const inlineStart = rtl
+            ? window.innerWidth - sidebarRect.left + 8
+            : sidebarRect.right + 8;
+        this.sidebarTooltipStyle = `top:${rect.top + rect.height / 2}px;inset-inline-start:${inlineStart}px`;
+    },
+    hideSidebarTooltip() {
+        window.clearTimeout(this.sidebarTooltipTimer);
+        this.sidebarTooltipTimer = null;
+        this.sidebarTooltipVisible = false;
+        this.sidebarTooltipTarget = null;
     },
     fa,
     date,
@@ -405,15 +462,15 @@ Alpine.data("workspace", () => ({
         return `${name} تسک را تغییر داد`;
     },
     applyTheme() {
-        const dark = this.theme === "dark" || (this.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-        document.documentElement.classList.toggle("dark", dark);
-        document.documentElement.dataset.theme = dark ? "dark" : "light";
-        document.documentElement.dataset.themePreference = this.theme;
-    },
-    setTheme(theme) {
-        this.theme = theme;
-        localStorage.setItem("rasta-theme", theme);
-        this.applyTheme();
+        const root = document.documentElement;
+        root.classList.add("dark");
+        root.dataset.theme = "dark";
+        root.dataset.themePreference = "dark";
+        const themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) {
+            const pageColor = getComputedStyle(root).getPropertyValue("--surface-page").trim();
+            if (pageColor) themeColor.content = pageColor;
+        }
     },
     get currentProject() {
         return this.projects.find((p) => p.id === this.projectId);
@@ -437,9 +494,6 @@ Alpine.data("workspace", () => ({
             .filter((t) => !t.completed_at && t.due_date)
             .sort((a, b) => a.due_date.localeCompare(b.due_date))
             .slice(0, 5);
-    },
-    get unread() {
-        return this.notifications.filter((n) => !n.read_at).length;
     },
     get boardProjects() {
         return this.projects.filter(
@@ -465,19 +519,22 @@ Alpine.data("workspace", () => ({
         );
     },
     color(id) {
-        return `var(--color-sys-data-category-${(Number(id) % 4) + 1}-bg)`;
+        const memberId = Number(id) || 0;
+        const marker = Number(memberId) === Number(this.user?.id) ? 4 : (Math.abs(memberId) % 8) + 1;
+        return `var(--project-marker-${marker})`;
     },
-    colorToken(path) {
-        return getComputedStyle(document.documentElement).getPropertyValue(`--color-sys-${path}`).trim();
+    markerToken(value) {
+        const marker = /^project-marker-([1-8])$/.exec(String(value ?? ""));
+        return marker ? marker[0] : "project-marker-1";
     },
     labelColorPalette() {
-        return Array.from({ length: 12 }, (_, index) => this.colorToken(`data-label-palette-${index + 1}`));
+        return Array.from({ length: 8 }, (_, index) => `project-marker-${index + 1}`);
     },
     projectColorPalette() {
-        return Array.from({ length: 12 }, (_, index) => this.colorToken(`data-project-palette-${index + 1}`));
+        return Array.from({ length: 8 }, (_, index) => `project-marker-${index + 1}`);
     },
     stageColor(i) {
-        return `var(--color-sys-data-category-${(i % 5) + 1}-solid)`;
+        return `var(--project-marker-${(i % 8) + 1})`;
     },
     myStages(project) {
         return (project?.member_stages || []).filter((s) => s.member_id === this.user.id);
@@ -823,30 +880,46 @@ Alpine.data("workspace", () => ({
         const data = clone(source);
         delete data.id; delete data.owner_id; delete data.assignee; delete data.members; delete data.comments; delete data.attachments; delete data.activities; delete data.created_at; delete data.updated_at; delete data.completed_at;
         data.labels = (data.labels || []).map((l) => typeof l === 'object' ? l.id : l);
-        data.subtasks = (data.subtasks || []).map((st) => ({id:st.id || null,title:st.title,completed:!!(st.completed || st.completed_at)}));
+        data.subtasks = (data.subtasks || []).filter((st) => st.title?.trim()).map((st) => ({id:st.id || null,title:st.title,completed:!!st.completed}));
         data.completed = !!(source.completed || source.completed_at);
         return data;
     },
     scheduleTaskAutosave() {
-        if (!this.taskForm.id || this.taskReadOnly || !this.canWrite(this.formProject)) return;
+        if (!this.taskForm.id || this.taskReadOnly) return;
+        this.taskSaveStatus = "pending";
         clearTimeout(this.taskAutosaveTimer);
         this.taskAutosaveTimer = setTimeout(() => this.autosaveTask(), 500);
     },
     async autosaveTask() {
-        if (!this.taskForm.id || this.taskSaving || this.taskReadOnly || !this.canWrite(this.formProject)) return;
+        if (!this.taskForm.id || this.taskReadOnly) return false;
+        if (this.taskSaving) {
+            await this.taskAutosavePromise;
+            return this.autosaveTask();
+        }
         clearTimeout(this.taskAutosaveTimer);
         this.taskSaving = true;
+        this.taskSaveStatus = "saving";
         this.errors = {};
-        const payload = this.taskPayload(this.taskForm);
+        const form = this.taskForm;
+        const payload = this.taskPayload(form);
+        const submittedSubtasks = form.subtasks.filter((st) => st.title?.trim());
+        let saved = false;
+        let finishSave;
+        this.taskAutosavePromise = new Promise((resolve) => { finishSave = resolve; });
         try {
-            await this.api(`/tasks/${this.taskForm.id}`, "PUT", payload);
-            const local = this.tasks.find((item) => item.id === this.taskForm.id);
+            const updated = await this.api(`/tasks/${form.id}`, "PUT", payload);
+            submittedSubtasks.forEach((subtask, index) => {
+                if (!subtask.id && updated.subtasks?.[index]) subtask.id = updated.subtasks[index].id;
+            });
+            const local = this.tasks.find((item) => item.id === form.id);
             if (local) {
-                Object.assign(local, { project_id: this.taskForm.project_id, title: payload.title, description: payload.description, owner_id: this.taskForm.owner_id, member_stage_id: this.taskForm.member_stage_id, product_stage_id: this.taskForm.product_stage_id, start_date: this.taskForm.start_date, due_date: this.taskForm.due_date });
+                Object.assign(local, updated);
             }
-            this.taskEditSnapshot = { title: this.taskForm.title, description: this.taskForm.description };
-            this.modalSnapshot = this.snapshot();
-        } catch (e) { this.fail(e); } finally { this.taskSaving = false; }
+            this.taskEditSnapshot = { title: payload.title, description: payload.description };
+            this.taskSaveStatus = "saved";
+            saved = true;
+        } catch (e) { this.taskSaveStatus = "error"; this.fail(e); } finally { this.taskSaving = false; finishSave(); }
+        return saved;
     },
     autosaveTaskNow(includeDetails = false) {
         if (!this.taskForm.id || this.taskReadOnly) return;
@@ -863,8 +936,8 @@ Alpine.data("workspace", () => ({
         }, 280);
     },
     async closeTaskComposer() {
-        if (this.taskForm.id && this.taskDetailsDirty()) {
-            await this.autosaveTaskNow(true);
+        if (this.taskForm.id && !this.taskReadOnly) {
+            if (!await this.autosaveTaskNow(true)) return;
         }
         this.taskDetailsEditing = false;
         this.finishTaskModalClose();
@@ -1056,6 +1129,7 @@ Alpine.data("workspace", () => ({
         this.commentText = "";
         this.taskDateOpen = false;
         this.taskDetailsEditing = !task;
+        this.taskSaveStatus = "";
         this.labelQuery = "";
         this.inlineStage = false;
         const personalStage = !!stage && !stage.project_id;
@@ -1359,7 +1433,7 @@ Alpine.data("workspace", () => ({
         try {
             const l = await this.api("/labels", "POST", {
                 name,
-                color: this.colorToken("data-label-palette-1"),
+                color: "project-marker-1",
                 project_id: this.taskForm.project_id,
             });
             this.labels.push(l);
@@ -1486,7 +1560,12 @@ Alpine.data("workspace", () => ({
         this.projectEditForm = {
             name: project.name || "",
             description: project.description || "",
-            color: project.color || this.colorToken("data-project-default"),
+            color: this.markerToken(project.color),
+            goal: {
+                title: project.goal?.title || "",
+                start_date: project.goal?.start_date?.slice(0, 10) || today(),
+                target_date: project.goal?.target_date?.slice(0, 10) || today(),
+            },
         };
         this.showModal("projectEdit");
     },
@@ -1530,13 +1609,10 @@ Alpine.data("workspace", () => ({
     openProject() {
         this.projectStep = 1;
         this.projectForm = {
-            color: this.colorToken("data-project-default"),
+            color: "project-marker-1",
             name: "",
-            description: "",
             goal: {
                 title: "",
-                description: "",
-                success_criterion: "",
                 start_date: today(),
                 target_date: today(),
             },
@@ -1552,7 +1628,6 @@ Alpine.data("workspace", () => ({
         if (step === 2) {
             for (const key of [
                 "title",
-                "success_criterion",
                 "start_date",
                 "target_date",
             ])
@@ -1761,7 +1836,7 @@ Alpine.data("workspace", () => ({
     openLabel(l = null) {
         this.labelForm = l
             ? clone(l)
-            : { name: "", color: this.colorToken("data-label-palette-1"), description: "", project_id: null };
+            : { name: "", color: "project-marker-1", description: "", project_id: null };
         this.showModal("label");
     },
     async saveLabel() {
@@ -1799,12 +1874,83 @@ Alpine.data("workspace", () => ({
             "حذف",
         );
     },
+    async saveAdminPin(form) {
+        if (this.securityBusy) return;
+        this.securityBusy = "admin";
+        try {
+            const payload = Object.fromEntries(new FormData(form).entries());
+            await this.api("/security/admin-pin", "PUT", payload);
+            form.reset();
+            this.errors = {};
+            await this.refresh();
+            this.closeSecurityDialog(true);
+            this.notify("رمز مدیر تغییر کرد.");
+        } catch (e) {
+            this.fail(e);
+        } finally {
+            this.securityBusy = "";
+        }
+    },
+    async saveMemberPin(form) {
+        if (this.securityBusy) return;
+        this.securityBusy = "member";
+        try {
+            const payload = Object.fromEntries(new FormData(form).entries());
+            await this.api("/security/member-pin", "PUT", payload);
+            form.reset();
+            this.errors = {};
+            await this.refresh();
+            this.closeSecurityDialog(true);
+            this.notify("رمز مشترک اعضا تغییر کرد.");
+        } catch (e) {
+            this.fail(e);
+        } finally {
+            this.securityBusy = "";
+        }
+    },
+    openSecurityDialog(kind) {
+        this.errors = {};
+        this.securityDialogTrigger = document.activeElement;
+        this.securityDialog = kind;
+        this.$nextTick(() => {
+            const field = kind === "admin"
+                ? this.$refs.adminPinCurrent
+                : this.$refs.memberPinCurrent;
+            field?.focus();
+        });
+    },
+    closeSecurityDialog(force = false) {
+        if (this.securityBusy && !force) return;
+        const trigger = this.securityDialogTrigger;
+        this.$refs.adminPinForm?.reset();
+        this.$refs.memberPinForm?.reset();
+        this.securityDialog = "";
+        this.securityDialogTrigger = null;
+        this.errors = {};
+        this.$nextTick(() => trigger?.focus?.());
+    },
+    trapSecurityDialog(e) {
+        const panel = this.$refs.securityDialogPanel;
+        const focusable = [...(panel?.querySelectorAll("button,input:not([type=hidden]),[tabindex='0']") || [])]
+            .filter((el) => !el.disabled && el.getClientRects().length);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    },
     async saveSettings() {
+        if (this.busy) return;
+        this.errors = {};
         this.busy = true;
         try {
             await this.api("/settings", "PUT", this.account);
-            document.addEventListener("input", (e) => { if (e.target instanceof HTMLTextAreaElement) this.autoGrow(e); });
-        await this.refresh();
+            await this.refresh();
             this.notify("اطلاعات حساب ذخیره شد.");
         } catch (e) {
             this.fail(e);
@@ -1851,39 +1997,6 @@ Alpine.data("workspace", () => ({
         } finally {
             this.avatarUploading = false;
         }
-    },
-    toggleSidebarNotifications() {
-        this.notificationsOpen = !this.notificationsOpen;
-        if (!this.notificationsOpen) return;
-        this.$nextTick(() => {
-            if (window.matchMedia("(max-width: 768px)").matches) return;
-            const button = this.$refs.sidebarNotificationButton;
-            const panel = this.$refs.sidebarNotificationPanel;
-            if (!button || !panel) return;
-            const buttonRect = button.getBoundingClientRect();
-            const panelHeight = Math.min(panel.scrollHeight, window.innerHeight - 32);
-            const belowSpace = window.innerHeight - buttonRect.bottom - 16;
-            const aboveSpace = buttonRect.top - 16;
-            let top;
-            if (belowSpace >= panelHeight) top = buttonRect.bottom + 8;
-            else if (aboveSpace >= panelHeight) top = buttonRect.top - panelHeight - 8;
-            else top = Math.max(16, Math.min(buttonRect.top - panelHeight - 8, window.innerHeight - panelHeight - 16));
-            panel.style.setProperty("--sidebar-notification-top", `${top}px`);
-        });
-    },
-    async readNotifications() {
-        try {
-            await this.api("/notifications/read", "POST");
-            this.notifications.forEach((n) => (n.read_at = new Date().toISOString()));
-        } catch (e) { this.fail(e); }
-    },
-    async openNotification(n) {
-        const task = this.tasks.find((t) => t.id === n.task_id);
-        if (!task) return;
-        if (!n.read_at) { await this.api(`/notifications/${n.id}/read`, 'POST'); n.read_at = new Date().toISOString(); }
-        await this.openTask(task);
-        this.notificationsOpen = false;
-        this.$nextTick(() => setTimeout(() => document.querySelector('[data-comment-id="'+n.comment_id+'"]')?.scrollIntoView({behavior:"smooth",block:"center"}), 150));
     },
 }));
 window.Alpine = Alpine;

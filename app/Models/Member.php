@@ -6,11 +6,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class Member extends Authenticatable
 {
-    protected $attributes = ['active' => true, 'color' => '#e5ddf7'];
+    protected $attributes = ['active' => true, 'color' => 'project-marker-4', 'role' => 'member'];
 
-    protected $guarded = ['id'];
+    protected $fillable = ['name', 'job_title', 'color', 'avatar_path'];
 
-    protected $hidden = ['remember_token', 'avatar_path'];
+    protected $hidden = ['remember_token', 'avatar_path', 'pin_hash'];
 
     protected $casts = ['active' => 'boolean'];
 
@@ -18,7 +18,7 @@ class Member extends Authenticatable
 
     public function getAvatarUrlAttribute(): ?string
     {
-        return $this->avatar_path ? route('avatar', ['member' => $this->id]) : null;
+        return $this->avatar_path ? route('avatar', ['member' => $this->id, 'v' => substr(hash('sha256', $this->avatar_path), 0, 16)]) : null;
     }
 
     public function projects()

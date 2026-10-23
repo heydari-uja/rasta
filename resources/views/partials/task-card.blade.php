@@ -10,7 +10,7 @@
         </div>
     </div>
     <div class="task-card-footer" x-show="page==='projects'">
-        <span class="task-creator" x-show="t.creator" :aria-label="'سازنده تسک: '+(t.creator?.name||'')"><span class="avatar task-creator-avatar"><img x-show="t.creator?.avatar_url" :src="t.creator?.avatar_url" :alt="t.creator?.name"><span x-show="!t.creator?.avatar_url" :style="`background:${color(t.creator?.id)}`" x-text="initials(t.creator?.name)"></span></span><span class="task-creator-name" x-text="t.creator?.name"></span></span>
+        <span class="task-creator" x-show="t.creator" :aria-label="'سازنده تسک: '+(t.creator?.name||'')"><span class="avatar task-creator-avatar"><img x-show="t.creator?.avatar_url" :src="t.creator?.avatar_url" :alt="t.creator?.name"><span class="avatar-initials" x-show="!t.creator?.avatar_url" :style="`--avatar-marker:${color(t.creator?.id)}`" x-text="initials(t.creator?.name)"></span></span><span class="task-creator-name" x-text="t.creator?.name"></span></span>
         <span class="task-project-date" :class="{'overdue':overdue(t)}" x-show="t.due_date||t.start_date"><span aria-hidden="true" x-html="$icon('CalendarDays')"></span><span x-text="t.due_date?'سررسید: '+shortDate(t.due_date):'شروع: '+shortDate(t.start_date)"></span></span>
     </div>
 </article>

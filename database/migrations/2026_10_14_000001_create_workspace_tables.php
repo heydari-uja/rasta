@@ -13,7 +13,7 @@ return new class extends Migration
             $t->string('name');
             $t->text('description')->nullable();
             $t->foreignId('created_by')->constrained('members');
-            $t->string('color')->default('#f07845');
+            $t->string('color')->default('project-marker-1');
             $t->timestamps();
         });
         Schema::create('project_members', function (Blueprint $t) {
@@ -78,7 +78,7 @@ return new class extends Migration
             $t->id();
             $t->foreignId('project_id')->nullable()->constrained()->cascadeOnDelete();
             $t->string('name');
-            $t->string('color')->default('#8170b8');
+            $t->string('color')->default('project-marker-1');
             $t->text('description')->nullable();
             $t->foreignId('created_by')->constrained('members');
             $t->timestamps();

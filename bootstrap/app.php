@@ -14,5 +14,13 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->dontFlash([
+            'pin',
+            'pin_confirmation',
+            'current_pin',
+            'admin_pin',
+            'admin_pin_confirmation',
+            'member_pin',
+            'member_pin_confirmation',
+        ]);
     })->create();

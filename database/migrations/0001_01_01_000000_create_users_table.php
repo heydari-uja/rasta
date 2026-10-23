@@ -12,7 +12,7 @@ return new class extends Migration
             $t->id();
             $t->string('name')->unique();
             $t->string('job_title')->nullable();
-            $t->string('color')->default('#e5ddf7');
+            $t->string('color')->default('project-marker-4');
             $t->boolean('active')->default(true);
             $t->rememberToken();
             $t->timestamps();

@@ -1,3 +1,5 @@
 <?php
 
-return ['password_hash' => env('UJA_PASSWORD_HASH')];
+return [
+    'bootstrap_pin' => env('RASTA_BOOTSTRAP_PIN'),
+];

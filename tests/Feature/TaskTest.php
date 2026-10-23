@@ -10,7 +10,7 @@ class TaskTest extends WorkspaceCase
     public function test_task_crud_subtasks_labels_and_progress(): void
     {
         $project = $this->project();
-        $label = $this->postJson('/api/labels', ['name' => 'طراحی', 'color' => '#9274be', 'project_id' => $project->id])->assertCreated()->json('id');
+        $label = $this->postJson('/api/labels', ['name' => 'طراحی', 'color' => 'project-marker-4', 'project_id' => $project->id])->assertCreated()->json('id');
         $payload = $this->taskPayload($project);
         $payload['labels'] = [$label];
         $payload['subtasks'] = [['title' => 'الف', 'completed' => true], ['title' => 'ب', 'completed' => false]];
@@ -30,6 +30,13 @@ class TaskTest extends WorkspaceCase
         $this->patchJson('/api/tasks/'.$taskId.'/complete', ['completed' => false])->assertOk();
         $this->deleteJson('/api/tasks/'.$taskId)->assertNoContent();
         $this->assertDatabaseCount('subtasks', 0);
+    }
+
+    public function test_label_color_must_use_a_project_marker_token(): void
+    {
+        $this->postJson('/api/labels', ['name' => 'رنگ نامعتبر', 'color' => 'custom-color'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('color');
     }
 
     public function test_assignee_is_creator_and_cannot_be_changed(): void
@@ -63,7 +70,7 @@ class TaskTest extends WorkspaceCase
         $payload['member_stage_id'] = $foreignStage->id;
         $this->postJson('/api/tasks', $payload)->assertUnprocessable()->assertJsonValidationErrors('member_stage_id');
 
-        $label = $this->postJson('/api/labels', ['name' => 'محدود', 'color' => '#9274be', 'project_id' => $otherProject->id])->json('id');
+        $label = $this->postJson('/api/labels', ['name' => 'محدود', 'color' => 'project-marker-4', 'project_id' => $otherProject->id])->json('id');
         $payload = $this->taskPayload($project);
         $payload['labels'] = [$label];
         $this->postJson('/api/tasks', $payload)->assertUnprocessable()->assertJsonValidationErrors('labels');
@@ -107,8 +114,8 @@ class TaskTest extends WorkspaceCase
 
     public function test_personal_labels_are_private_and_can_be_edited_deleted(): void
     {
-        $id = $this->postJson('/api/labels', ['name' => 'شخصی', 'color' => '#9274be'])->json('id');
-        $this->putJson('/api/labels/'.$id, ['name' => 'ویرایش', 'color' => '#527fa9'])->assertOk();
+        $id = $this->postJson('/api/labels', ['name' => 'شخصی', 'color' => 'project-marker-4'])->json('id');
+        $this->putJson('/api/labels/'.$id, ['name' => 'ویرایش', 'color' => 'project-marker-3'])->assertOk();
         $other = Member::create(['name' => 'دیگری', 'job_title' => 'طراح']);
         $this->actingAs($other)->getJson('/api/workspace')->assertJsonCount(0, 'labels');
         $this->deleteJson('/api/labels/'.$id)->assertNotFound();
@@ -201,7 +208,7 @@ class TaskTest extends WorkspaceCase
     public function test_personal_label_is_allowed(): void
     {
         $project = $this->project();
-        $personal = $this->postJson('/api/labels', ['name' => 'شخصی', 'color' => '#9274be'])->assertCreated()->json('id');
+        $personal = $this->postJson('/api/labels', ['name' => 'شخصی', 'color' => 'project-marker-4'])->assertCreated()->json('id');
         $payload = $this->taskPayload($project);
         $payload['labels'] = [$personal];
         $this->postJson('/api/tasks', $payload)->assertCreated();
