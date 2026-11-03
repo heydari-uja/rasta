@@ -1722,7 +1722,12 @@ fieldset {
 }
 .empty-state h2,
 .empty-state h3 {
+    color: var(--text-primary);
+}
+.empty-state p {
+    max-width: 36em;
     color: var(--text-muted);
+    text-align: center;
 }
 .empty-state > span svg {
     width: 35px;
@@ -3923,7 +3928,7 @@ fieldset {
 .modal-panel.task-modal-panel {
     width: min(860px, calc(100vw - 32px));
     max-width: 860px;
-    height: 85vh;
+    height: auto;
     max-height: 85vh;
     border-radius: var(--radius-card);
     overflow: hidden;
@@ -3932,6 +3937,19 @@ fieldset {
     box-shadow: 0 16px 48px color-mix(in srgb, var(--scrim) 18%, transparent);
 }
 .modal-panel.task-modal-panel > .modal-heading { display: none; }
+.modal-panel.task-modal-panel > .todoist-task-modal {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    max-height: 100%;
+}
+.modal-panel.task-modal-panel .task-modal-grid {
+    flex: 1 1 auto;
+}
+.modal-panel.task-modal-panel .task-modal-main,
+.modal-panel.task-modal-panel .task-details-panel {
+    min-height: 0;
+}
 .todoist-task-modal {
     height: 100%;
     display: flex;
@@ -6317,12 +6335,6 @@ select:disabled {
     color: var(--accent);
     box-shadow: 0 1px 3px color-mix(in srgb, var(--scrim) 18%, transparent);
 }
-.gate-card .login-error {
-    display: block;
-    margin-block: 0 12px;
-    padding: 10px 12px;
-    font-size: var(--text-caption-size);
-}
 .security-settings {
     margin-block-end: 24px;
 }
@@ -7815,6 +7827,9 @@ html:has(.project-wizard-form), body:has(.project-wizard-form) { overflow: hidde
 }
 .modal-footer > .button-primary {
     order: 1;
+}
+.modal-footer > .button-danger {
+    margin-inline-end: auto;
 }
 .confirm-dialog > .confirm-actions {
     direction: rtl;
