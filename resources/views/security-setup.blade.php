@@ -19,20 +19,14 @@
         <form method="POST" action="/api/security/setup" @submit="saving=true">
             @csrf
             <h2>حساب مدیر</h2>
-            <label>نام و نام خانوادگی مدیر<input name="name" value="{{ old('name') }}" required maxlength="100" autocomplete="name"></label>
-            @error('name')<small class="field-error">{{ $message }}</small>@enderror
-            <label>عنوان شغلی<input name="job_title" value="{{ old('job_title') }}" required maxlength="100" autocomplete="organization-title"></label>
-            @error('job_title')<small class="field-error">{{ $message }}</small>@enderror
+            <label>نام و نام خانوادگی مدیر<input name="name" value="{{ old('name') }}" required maxlength="100" autocomplete="name">@error('name')<small class="field-error">{{ $message }}</small>@enderror</label>
+            <label>عنوان شغلی<input name="job_title" value="{{ old('job_title') }}" required maxlength="100" autocomplete="organization-title">@error('job_title')<small class="field-error">{{ $message }}</small>@enderror</label>
             <h2>پین مدیر</h2>
-            <label>پین جدید مدیر<input type="password" name="admin_pin" required inputmode="numeric" maxlength="12" autocomplete="new-password"></label>
-            @error('admin_pin')<small class="field-error">{{ $message }}</small>@enderror
-            <label>تکرار پین مدیر<input type="password" name="admin_pin_confirmation" required inputmode="numeric" maxlength="12" autocomplete="new-password"></label>
-            @error('admin_pin_confirmation')<small class="field-error">{{ $message }}</small>@enderror
+            <label>پین جدید مدیر<input type="password" name="admin_pin" required inputmode="numeric" maxlength="12" autocomplete="new-password">@error('admin_pin')<small class="field-error">{{ $message }}</small>@enderror</label>
+            <label>تکرار پین مدیر<input type="password" name="admin_pin_confirmation" required inputmode="numeric" maxlength="12" autocomplete="new-password">@error('admin_pin_confirmation')<small class="field-error">{{ $message }}</small>@enderror</label>
             <h2>پین مشترک اعضا</h2>
-            <label>پین مشترک اعضا<input type="password" name="member_pin" required inputmode="numeric" maxlength="12" autocomplete="new-password"></label>
-            @error('member_pin')<small class="field-error">{{ $message }}</small>@enderror
-            <label>تکرار پین مشترک اعضا<input type="password" name="member_pin_confirmation" required inputmode="numeric" maxlength="12" autocomplete="new-password"></label>
-            @error('member_pin_confirmation')<small class="field-error">{{ $message }}</small>@enderror
+            <label>پین مشترک اعضا<input type="password" name="member_pin" required inputmode="numeric" maxlength="12" autocomplete="new-password">@error('member_pin')<small class="field-error">{{ $message }}</small>@enderror</label>
+            <label>تکرار پین مشترک اعضا<input type="password" name="member_pin_confirmation" required inputmode="numeric" maxlength="12" autocomplete="new-password">@error('member_pin_confirmation')<small class="field-error">{{ $message }}</small>@enderror</label>
             <button class="button button-primary" type="submit" :disabled="saving" :aria-busy="saving?'true':'false'"><span class="button-spinner" x-show="saving" x-cloak x-html="$icon('LoaderCircle')"></span><span>تکمیل راه‌اندازی</span></button>
         </form>
     </section>
