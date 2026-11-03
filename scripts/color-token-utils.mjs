@@ -13,12 +13,11 @@ export const semanticNames = [
 ];
 
 export const componentNames = [
-    'button-brand-solid-bg-default', 'button-brand-solid-bg-hover', 'button-brand-solid-bg-pressed', 'button-brand-solid-fg',
-    'button-brand-quiet-bg-default', 'button-brand-quiet-bg-hover', 'button-brand-quiet-bg-pressed', 'button-brand-quiet-fg',
-    'button-neutral-solid-bg', 'button-neutral-solid-border', 'button-neutral-solid-border-hover', 'button-neutral-solid-fg',
-    'button-neutral-quiet-bg-default', 'button-neutral-quiet-bg-hover', 'button-neutral-quiet-bg-pressed', 'button-neutral-quiet-fg', 'button-neutral-quiet-fg-hover',
-    'button-danger-solid-bg-default', 'button-danger-solid-bg-hover', 'button-danger-solid-bg-pressed', 'button-danger-solid-fg',
-    'field-bg', 'field-border', 'field-fg', 'field-placeholder',
+    'button-primary-bg', 'button-primary-bg-hover', 'button-primary-bg-pressed', 'button-primary-fg',
+    'button-secondary-bg', 'button-secondary-border', 'button-secondary-border-hover', 'button-secondary-fg',
+    'button-quiet-bg', 'button-quiet-bg-hover', 'button-quiet-bg-pressed', 'button-quiet-fg', 'button-quiet-fg-hover',
+    'button-danger-bg', 'button-danger-bg-hover', 'button-danger-bg-pressed', 'button-danger-fg',
+    'field-bg', 'field-border', 'field-border-error', 'field-fg', 'field-placeholder',
 ];
 
 const primitiveNames = [

@@ -33,7 +33,7 @@
             @error('member_pin')<small class="field-error">{{ $message }}</small>@enderror
             <label>تکرار پین مشترک اعضا<input type="password" name="member_pin_confirmation" required inputmode="numeric" maxlength="12" autocomplete="new-password"></label>
             @error('member_pin_confirmation')<small class="field-error">{{ $message }}</small>@enderror
-            <button class="button primary" type="submit" :disabled="saving" x-text="saving?'در حال ذخیره...':'تکمیل راه‌اندازی'"></button>
+            <button class="button button-primary" type="submit" :disabled="saving" :aria-busy="saving?'true':'false'"><span class="button-spinner" x-show="saving" x-cloak x-html="$icon('LoaderCircle')"></span><span>تکمیل راه‌اندازی</span></button>
         </form>
     </section>
 </main>

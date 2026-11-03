@@ -29,7 +29,7 @@ async function captureThemePair(page, screenshotDir, name) {
     const groups=document.querySelectorAll('.button-row,.task-editor-actions,.column-create-actions,.settings-account-actions,.settings-dialog-actions,.comment-composer-actions');
     return [...groups].flatMap(group=>{
       const buttons=[...group.children].filter(el=>el.matches('button')&&el.getClientRects().length);
-      const primary=buttons.find(el=>el.matches('.primary,.danger'));
+      const primary=buttons.find(el=>el.matches('.button-primary,.button-danger'));
       if(!primary)return [];
       return buttons.some(el=>el!==primary&&el.getBoundingClientRect().left<primary.getBoundingClientRect().left-1)?[group.className]:[];
     });
@@ -130,7 +130,7 @@ test('workspace flows and resolved color themes', async ({page}) => {
   await captureThemePair(page,screenshotDir,'project-board-empty');
   await page.locator('.product-board .add-column-trigger').click();
   await page.locator('.product-board [data-inline-column-input]').fill('طراحی');
-  await page.locator('.product-board .column-create-actions .primary').click();
+  await page.locator('.product-board .column-create-actions .button-primary').click();
   await expect(page.locator('.product-board .board-column')).toHaveCount(2);
   await captureThemePair(page,screenshotDir,'project-board');
 
@@ -139,7 +139,7 @@ test('workspace flows and resolved color themes', async ({page}) => {
   await page.locator('.task-global-add-column .ui-select-trigger').click();
   await page.locator('.ui-select-option').filter({hasText:'بدون پروژه'}).click();
   await page.locator('[data-inline-column-input]').fill('در دست انجام');
-  await page.locator('.column-create-actions .primary').click();
+  await page.locator('.column-create-actions .button-primary').click();
   await expect(page.locator('.task-stage-column')).toHaveCount(1);
   await captureThemePair(page,screenshotDir,'my-tasks-empty');
   await page.locator('.task-stage-column .add-column-task').click();

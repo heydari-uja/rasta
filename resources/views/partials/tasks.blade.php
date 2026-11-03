@@ -17,7 +17,7 @@
             <form class="column-create-form" x-show="inlineColumn?.kind==='member'&&inlineColumn?.source==='tasks'" @submit.prevent="saveTaskColumn()" @keydown.escape.prevent="cancelInlineColumn()">
                 <x-ui-select model="inlineColumnForm.project_id" options="[{value:'none',label:'بدون پروژه'},...projects.map(p=>({value:p.id,label:p.name}))]" placeholder="انتخاب پروژه یا حالت شخصی" />
                 <input data-inline-column-input x-model="inlineColumnForm.title" placeholder="نام این ستون" maxlength="120">
-                <div class="column-create-actions"><button class="button primary small-button" type="submit" :disabled="!inlineColumnForm.title.trim()||inlineColumnForm.project_id===''">افزودن ستون</button><button class="text-button" type="button" @click="cancelInlineColumn()">انصراف</button></div>
+                <div class="column-create-actions"><button class="button button-primary" type="submit" :disabled="!inlineColumnForm.title.trim()||inlineColumnForm.project_id===''">افزودن ستون</button><button class="button button-quiet" type="button" @click="cancelInlineColumn()">انصراف</button></div>
             </form>
         </section>
     </div>
