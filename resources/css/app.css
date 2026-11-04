@@ -446,7 +446,7 @@ fieldset {
 }
 .search-wrap kbd {
     direction: ltr;
-    font: 10px var(--font);
+    font: var(--text-caption-size) var(--font);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-control);
     padding: 0 5px;
@@ -499,7 +499,7 @@ fieldset {
 .content {
     max-width: 1550px;
     margin: 0 auto;
-    padding: 31px 36px 40px;
+    padding: var(--space-6);
     min-height: calc(100vh - 126px);
 }
 .page-heading {
@@ -507,7 +507,7 @@ fieldset {
     align-items: center;
     justify-content: space-between;
     gap: 20px;
-    margin-block-end: 27px;
+    margin-block-end: var(--space-5);
 }
 .page-heading .eyebrow {
     margin-block-end: 4px;
@@ -519,8 +519,9 @@ fieldset {
 }
 .page-heading p {
     color: var(--text-muted);
-    font-size: var(--text-caption-size);
-    margin-block-start: 3px;
+    font-size: var(--text-body-size);
+    line-height: var(--text-body-line);
+    margin-block-start: var(--space-1);
 }
 .hello-sun {
     margin-inline-start: 5px;
@@ -1125,11 +1126,11 @@ fieldset {
 .goal-card {
     display: flex;
     justify-content: space-between;
-    gap: 25px;
+    gap: var(--space-5);
     border: 1px solid var(--border-subtle);
     background: var(--surface-muted);
     border-radius: var(--radius-card);
-    padding: 26px 30px;
+    padding: var(--space-5) var(--space-6);
 }
 .goal-main {
     flex: 1;
@@ -1727,6 +1728,8 @@ fieldset {
 .empty-state p {
     max-width: 36em;
     color: var(--text-muted);
+    font-size: var(--text-body-size);
+    line-height: var(--text-body-line);
     text-align: center;
 }
 .empty-state > span svg {
@@ -1834,7 +1837,7 @@ fieldset {
     display: block;
     font-size: var(--text-caption-size);
     font-weight: 500;
-    margin-block-end: 17px;
+    margin-block-end: var(--space-4);
     color: var(--text-muted);
 }
 .modal-body input[type="checkbox"] {
@@ -2217,8 +2220,8 @@ fieldset {
     margin-top: 6px;
 }
 .comment-actions button {
-    min-height: 26px;
-    padding: 3px 7px;
+    min-height: 32px;
+    padding: var(--space-1) var(--space-2);
     border: 0;
     border-radius: var(--radius-control);
     background: transparent;
@@ -2696,7 +2699,7 @@ fieldset {
 }
 @media (min-width: 1500px) {
     .content {
-        padding-block-start: 37px;
+        padding-block-start: var(--space-6);
     }
     .welcome-banner {
         min-height: 265px;
@@ -2719,7 +2722,7 @@ fieldset {
         padding-inline: 25px;
     }
     .content {
-        padding: 25px;
+        padding: var(--space-5);
     }
     .project-grid {
         gap: 12px;
@@ -2842,7 +2845,7 @@ fieldset {
         display: none;
     }
     .content {
-        padding: 23px 16px;
+        padding: var(--space-4);
     }
     .page-heading {
         align-items: flex-start;
@@ -2854,7 +2857,7 @@ fieldset {
         font-size: var(--text-page-size);
     }
     .page-heading p {
-        font-size: var(--text-caption-size);
+        font-size: var(--text-body-size);
     }
     .date-chip {
         font-size: var(--text-caption-size);
@@ -5314,8 +5317,8 @@ input[type="color"]:focus-visible { border-color: var(--border-strong); box-shad
 
 /* Tasks page divider and column hover */
 .tasks-page > .page-heading {
-    padding-bottom: 22px;
-    margin-bottom: 24px;
+    padding-bottom: var(--space-4);
+    margin-bottom: var(--space-5);
     border-bottom: 1px solid var(--border-subtle);
 }
 .tasks-page .task-project-section .board-column {
@@ -6324,7 +6327,7 @@ select:disabled {
     background: var(--surface-muted);
 }
 .login-mode > button {
-    min-height: 38px;
+    min-height: var(--control-height);
     border-radius: var(--radius-control);
     color: var(--text-muted);
     font-size: var(--text-caption-size);
@@ -6600,7 +6603,7 @@ select:disabled {
 .settings-avatar-change {
     display: inline-flex;
     margin-block-start: 0;
-    min-height: 32px;
+    min-height: var(--control-height);
     padding: 0;
     color: var(--accent);
     font: inherit;
@@ -6625,9 +6628,9 @@ select:disabled {
 .settings-account-form input {
     display: block;
     width: 100%;
-    min-height: 46px;
-    margin-block-start: 6px;
-    padding: 8px 11px;
+    min-height: var(--control-height);
+    margin-block-start: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-control);
     background: var(--surface-base);
@@ -6774,8 +6777,8 @@ select:disabled {
 }
 .settings-row-action {
     flex: 0 0 auto;
-    min-height: 44px;
-    padding: 6px 11px;
+    min-height: var(--control-height);
+    padding: var(--space-2) var(--space-3);
     font-size: var(--text-caption-size);
 }
 .settings-security-backdrop {
@@ -6834,9 +6837,9 @@ select:disabled {
 .settings-dialog-body input {
     display: block;
     width: 100%;
-    min-height: 42px;
-    margin-block-start: 6px;
-    padding: 8px 10px;
+    min-height: var(--control-height);
+    margin-block-start: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-control);
     background: var(--surface-base);
@@ -7117,7 +7120,7 @@ select:disabled {
     align-items: center;
     gap: 12px;
     width: 100%;
-    height: 42px;
+    height: var(--control-height);
     padding: 0 12px;
     border: 0;
     border-radius: var(--radius-control);
@@ -7203,7 +7206,7 @@ select:disabled {
 .sidebar-section-heading {
     display: flex;
     align-items: center;
-    min-height: 28px;
+    min-height: var(--control-height);
     margin: 0 0 6px;
     padding: 0 12px;
 }
@@ -7240,8 +7243,8 @@ select:disabled {
     display: grid;
     flex: none;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: var(--control-height);
+    height: var(--control-height);
     margin-inline-start: auto;
     padding: 0;
     border: 0;
@@ -7292,12 +7295,12 @@ select:disabled {
 }
 .sidebar-project-edit {
     position: absolute;
-    inset-inline-end: 5px;
+    inset-inline-end: 0;
     display: grid;
     flex: none;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: var(--control-height);
+    height: var(--control-height);
     padding: 0;
     border: 0;
     border-radius: var(--radius-control);
