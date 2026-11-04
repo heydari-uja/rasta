@@ -3946,6 +3946,12 @@ fieldset {
     min-height: 0;
     max-height: 100%;
 }
+.modal-panel.task-modal-panel.is-creating {
+    min-height: min(72vh, 720px);
+}
+.modal-panel.is-creating .task-editor-box .task-description-editor textarea {
+    min-height: 96px !important;
+}
 .modal-panel.task-modal-panel .task-modal-grid {
     flex: 1 1 auto;
 }
@@ -4395,7 +4401,10 @@ textarea { resize: none; overflow: hidden; min-height: var(--control-height); }
 
 /* Todoist-style task editor */
 .task-editor-row { display: flex; align-items: flex-start; gap: 12px; }
-.task-editor-box { flex: 1; min-width: 0; border: 1px solid transparent; border-radius: var(--radius-control); padding: 8px 10px; cursor: text; }
+.task-editor-box { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid transparent; border-radius: var(--radius-control); padding: 8px 10px; cursor: text; }
+.task-editor-box .task-title-editor { display: block; width: 100%; }
+.task-editor-box .task-description-editor { width: 100%; }
+.task-editor-box .task-description-editor textarea { flex: 1 1 auto; min-width: 0; width: auto; }
 .task-editor-box.is-editing { border-color: var(--border-strong); background: var(--surface-base); }
 .task-editor-box.is-editing:focus-within { border-color: var(--border-strong); box-shadow: none; }
 .task-editor-box.has-error { border-color: var(--field-border-error); background: var(--field-bg); }
@@ -7781,12 +7790,13 @@ html:has(.project-wizard-form), body:has(.project-wizard-form) { overflow: hidde
     min-height: 40px;
 }
 .todoist-task-modal .task-editor-box.is-editing,
-.todoist-task-modal .task-editor-box.is-editing:focus-within {
+.todoist-task-modal .task-editor-box.is-editing:focus-within,
+.comment-composer-shell:focus-within {
     border-color: var(--border-strong);
     box-shadow: none;
 }
 /* Input focus uses a single neutral border throughout the workspace. */
-:is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]), textarea, select, .date-trigger, .ui-select-trigger):is(:focus, :focus-visible) {
+:is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not(.field-plain), textarea:not(.field-plain), select, .date-trigger, .ui-select-trigger):is(:focus, :focus-visible) {
     outline: var(--focus-width) solid var(--accent) !important;
     outline-offset: var(--focus-offset) !important;
     box-shadow: none !important;
