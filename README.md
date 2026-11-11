@@ -1,54 +1,42 @@
-# راستا — هر قدم، نزدیک‌تر به هدف
+# راستا (PHP خام)
 
-فضای کار تیمی فارسی و RTL با Laravel 12، Blade، Alpine.js و Tailwind CSS/Vite. فونت Vazirmatn با وزن‌های ۴۰۰ تا ۷۰۰ محلی است. نصب خالی است؛ هیچ Seeder یا حساب، پروژه و برچسب نمونه‌ای وجود ندارد.
+نسخهٔ PHP خام راستا روی ساختار PHP_BASE — بدون Laravel، با رندر صفحات PHP و چند endpoint سادهٔ JSON برای Alpine.
 
-## اجرا
+## نیازمندی
 
-نیازمندی‌های نسخه قفل‌شده: PHP 8.4+ و افزونه‌های ctype، curl، dom، fileinfo، intl، mbstring، PDO، pdo_sqlite (یا pdo_mysql)، tokenizer، xml، xmlwriter؛ Composer 2؛ Node.js 22.12+ و npm. SQLite برای توسعه و MySQL 8 برای سرور قابل استفاده است.
+- PHP 8.1+ (PDO MySQL، GD، OpenSSL)
+- MySQL 8 / MariaDB
+- ServBay یا Apache با `mod_rewrite`
 
-```bash
-composer install
-cp .env.example .env
-php artisan key:generate
-touch database/database.sqlite
-php artisan migrate
-php artisan uja:setup
-npm ci
-npm run build
-php artisan serve
+## راه‌اندازی
+
+1. در phpMyAdmin فایل `rasta.sql` را از ریشهٔ پروژه Import کنید (دیتابیس `rasta` ساخته می‌شود).
+2. در `config/config.php` مقادیر `DB_HOST`، `DB_USERNAME`، `DB_PASSWORD`، `DB_NAME` را تنظیم کنید.
+3. Document Root سایت را روی **همین پوشه** (جایی که `index.php` و `.htaccess` هستند) بگذارید — نه فقط `public/`.
+4. پوشهٔ `storage/private` باید برای PHP قابل نوشتن باشد.
+5. PIN موقت راه‌اندازی مدیر: `4868` (ثابت `RASTA_BOOTSTRAP_PIN` در `config/config.php`).
+
+## اولین ورود
+
+1. `/login` → حالت **مدیر** → PIN `4868`
+2. تکمیل `/security/setup` (پین مدیر + پین مشترک اعضا)
+3. ورود اعضا با پین مشترک و انتخاب پروفایل در `/profiles`
+
+## ساختار
+
+```
+index.php          فرانت‌کنترلر
+.htaccess          روتینگ Apache
+config/            تنظیمات
+database/          کلاس Database
+helpers/           uri، csrf، flash، asset
+lib/               Validator، AuthGate، PinSecurity، JsonPresenter
+activities/        Auth، Security، Workspace
+routes/web.php     مسیرها
+template/          قالب‌های PHP
+public/app/        CSS/JS بیلدشده (Alpine + Tailwind)
+storage/private/   پیوست و آواتار
+rasta.sql          اسکیمای MySQL
 ```
 
-سپس نشانی‌ای را که `artisan serve` چاپ می‌کند در مرورگر باز کنید. در دستور `uja:setup` رمز مشترک را دو بار با ورودی مخفی وارد کنید. فقط هش آن در `.env` ذخیره می‌شود؛ رمز پیش‌فرض وجود ندارد. رمز را در فرمان، README، Git یا پیام ننویسید. پس از ورود، «شما کی هستید؟» نمایش داده می‌شود و می‌توانید پروفایل خود را انتخاب کنید یا نام و عنوان شغلی خود را اضافه کنید. انتخاب پروفایل روی دستگاه به خاطر سپرده می‌شود. منوی پایین سایدبار «تغییر پروفایل» و «خروج» دارد. تغییر رمز مشترک، دسترسی نشست‌های قبلی را باطل می‌کند.
-
-برای توسعه CSS/JS، `npm run dev` را در ترمینال دیگری اجرا کنید. برای MySQL، پیش از migrate مقادیر DB_CONNECTION=mysql، DB_HOST، DB_PORT، DB_DATABASE، DB_USERNAME و DB_PASSWORD را فقط در `.env` تنظیم کنید؛ دیتابیس باید موجود باشد. آزمون مستقل MySQL در این تحویل انجام نشده است.
-
-## آزمون‌ها
-
-```bash
-php artisan test
-./vendor/bin/pint --test
-npm run build
-npm run test:browser
-```
-
-آزمون مرورگر به Chromium نیاز دارد؛ مسیر پیش‌فرض `/usr/bin/chromium` است و می‌توان `CHROMIUM_PATH` را تنظیم کرد. runner یک دیتابیس SQLite موقت و رمز تصادفی فقط در حافظه ایجاد می‌کند، سرور آزمون را روی یک پورت آزاد اجرا می‌کند و در پایان دیتابیس موقت را پاک می‌کند. داده آزمون وارد دیتابیس اصلی نمی‌شود. اسکرین‌شات‌های بررسی رنگ در `docs/color-audit/screenshots` ذخیره می‌شوند و خروجی‌های عیب‌یابی آزمون در `storage/browser-results` قرار می‌گیرند. ثبت trace ویدیو خاموش است تا ورودی رمز ذخیره نشود.
-
-## امنیت و نگهداری
-
-همه اعضای فعال دسترسی مشترک به پروژه‌ها و تسک‌ها دارند. نقش owner/viewer، ثبت‌نام ایمیلی و رمز شخصی وجود ندارد. برچسب شخصی فقط برای سازنده دیده می‌شود. نظر و پیوست فقط توسط نویسنده ویرایش/حذف می‌شود. فایل‌ها در `storage/app/private/attachments` نگهداری می‌شوند و فقط از مسیر احراز هویت‌شده دانلود می‌شوند؛ `storage:link` لازم نیست. محدودیت هر فایل ۵ مگابایت؛ فرمت مجاز PDF، PNG، JPEG، WebP و TXT است.
-
-CSRF، محدودسازی ورود، نشست Laravel، اعتبارسنجی و policy سمت سرور فعال‌اند. اطلاعات در DB با تاریخ ISO ذخیره و در رابط با تقویم شمسی و ارقام فارسی نمایش داده می‌شود. فقط پوشه `public` را به عنوان web root منتشر کنید؛ روی سرور HTTPS، APP_ENV=production، APP_DEBUG=false و SESSION_SECURE_COOKIE=true تنظیم شود. هیچ pipeline یا GitHub Actions ایجاد نشده است.
-
-پیش از commit:
-
-```bash
-python3 scripts/scan-secrets.py
-```
-
-Git فایل `.env`، وابستگی‌ها، دیتابیس SQLite و محتوای storage را نادیده می‌گیرد. `.env.example` فقط نام تنظیمات و جای خالی هش دارد. فایل‌های خصوصی و دیتابیس را جداگانه و امن پشتیبان بگیرید. پروژه به داده نمایشی، CDN یا سرویس بیرونی برای اجرا وابسته نیست.
-
-[طرح ساخت](docs/PLAN.md) · [فرض‌ها](ASSUMPTIONS.md) · [گزارش تحویل](docs/DELIVERY.md)
-
-## نمونه خروجی
-
-[گالری تصاویر واقعی برنامه](docs/PREVIEW.md) شامل خانه، پروژه، مودال تسک و نمایش موبایل است.
+ظاهر و فلو همان نسخهٔ قبلی است؛ تعامل‌های کانبان/مودال همچنان با `fetch` به `/api/*` کار می‌کنند.

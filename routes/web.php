@@ -1,71 +1,63 @@
 <?php
 
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\SecurityController;
-use App\Http\Controllers\WorkspaceController;
-use App\Http\Middleware\EnsureAdmin;
-use App\Http\Middleware\EnsureBootstrapSetup;
-use App\Http\Middleware\EnsureSecuritySetupComplete;
-use App\Http\Middleware\RequireWorkspaceUser;
-use App\Http\Middleware\SharedAccess;
-use Illuminate\Support\Facades\Route;
+use Activities\Auth\Auth;
+use Activities\Security\Security;
+use Activities\Workspace\Workspace;
 
-Route::get('/', fn () => redirect('/tasks'));
-Route::get('/login', fn () => auth()->check() ? redirect('/tasks') : view('auth'))->name('login');
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
-Route::post('/logout', [AuthController::class, 'logout'])->middleware(SharedAccess::class);
-Route::get('/security/setup', fn () => view('security-setup'))->middleware(EnsureBootstrapSetup::class);
-Route::post('/api/security/setup', [SecurityController::class, 'completeInitialSetup'])
-    ->middleware(['throttle:pin-changes', EnsureBootstrapSetup::class]);
+uri('', Auth::class, 'home', 'GET');
+uri('login', Auth::class, 'loginForm', 'GET');
+uri('login', Auth::class, 'login', 'POST');
+uri('logout', Auth::class, 'logout', 'POST');
+uri('security/setup', Auth::class, 'securitySetupForm', 'GET');
+uri('api/security/setup', Security::class, 'completeInitialSetup', 'POST');
 
-Route::middleware([SharedAccess::class, EnsureSecuritySetupComplete::class])->group(function () {
-    Route::get('/profiles', [AuthController::class, 'profiles']);
-    Route::post('/profiles', [AuthController::class, 'select'])->middleware('throttle:20,1');
-    Route::post('/profile/switch', [AuthController::class, 'switch']);
-    Route::get('/avatars/{member}', [WorkspaceController::class, 'avatar'])->name('avatar');
-});
-Route::middleware([SharedAccess::class, RequireWorkspaceUser::class])->group(function () {
-    Route::middleware(EnsureSecuritySetupComplete::class)->group(function () {
-        Route::redirect('/projects', '/tasks');
-        foreach (['/projects/{project}', '/projects/{project}/goal', '/projects/{project}/stages', '/tasks', '/tasks/{task}', '/labels', '/settings'] as $path) {
-            Route::get($path, function () {
-                return view('workspace');
-            });
-        }
-        Route::get('/attachments/{attachment}', [WorkspaceController::class, 'download']);
-        Route::prefix('api')->middleware('throttle:120,1')->controller(WorkspaceController::class)->group(function () {
-            Route::get('/workspace', 'data');
-            Route::post('/projects', 'project');
-            Route::match(['put', 'delete'], '/projects/{project}', 'projectRecord');
-            Route::put('/projects/{project}/goal', 'goal');
-            Route::post('/projects/{project}/stages', 'stage');
-            Route::put('/member-stages/order', 'memberStageOrder');
-            Route::post('/member-stages', 'personalStage');
-            Route::match(['put', 'delete'], '/member-stages/{stage}', 'personalStage');
-            Route::put('/projects/{project}/stages/{kind}/order', 'order')->whereIn('kind', ['product', 'member']);
-            Route::match(['put', 'delete'], '/projects/{project}/stages/{kind}/{id}', 'updateStage')->whereIn('kind', ['product', 'member']);
-            Route::get('/tasks/{task}', 'taskDetail');
-            Route::post('/tasks', 'saveTask');
-            Route::put('/tasks/reorder', 'reorderTasks');
-            Route::put('/tasks/{task}', 'saveTask');
-            Route::patch('/tasks/{task}/complete', 'complete');
-            Route::patch('/tasks/{task}/product-stage', 'moveTaskStage');
-            Route::delete('/tasks/{task}', 'removeTask');
-            Route::post('/labels', 'label');
-            Route::match(['put', 'delete'], '/labels/{label}', 'label');
-            Route::post('/tasks/{task}/comments', 'comment');
-            Route::match(['post', 'put', 'delete'], '/comments/{comment}', 'editComment');
-            Route::post('/tasks/{task}/attachments', 'upload');
-            Route::delete('/attachments/{attachment}', 'removeAttachment');
-            Route::post('/notifications/read', 'notifications');
-            Route::post('/notifications/{notification}/read', 'notifications');
-            Route::put('/settings', 'settings');
-            Route::post('/settings/avatar', 'uploadAvatar');
-            Route::delete('/settings/avatar', 'removeAvatar');
-        });
-        Route::prefix('api/security')->middleware('throttle:pin-changes')->controller(SecurityController::class)->group(function () {
-            Route::put('/admin-pin', 'updateAdminPin')->middleware(EnsureAdmin::class);
-            Route::put('/member-pin', 'updateMemberPin')->middleware(EnsureAdmin::class);
-        });
-    });
-});
+uri('profiles', Auth::class, 'profiles', 'GET');
+uri('profiles', Auth::class, 'select', 'POST');
+uri('profile/switch', Auth::class, 'switchProfile', 'POST');
+
+uri('avatars/{member}', Workspace::class, 'avatar', 'GET');
+uri('attachments/{attachment}', Workspace::class, 'download', 'GET');
+
+foreach (['tasks', 'tasks/{task}', 'projects', 'projects/{project}', 'projects/{project}/goal', 'projects/{project}/stages', 'labels', 'settings'] as $path) {
+    uri($path, Workspace::class, 'shell', 'GET');
+}
+
+uri('api/workspace', Workspace::class, 'data', 'GET');
+uri('api/projects', Workspace::class, 'project', 'POST');
+uri('api/projects/{project}', Workspace::class, 'projectRecord', 'PUT');
+uri('api/projects/{project}', Workspace::class, 'projectRecord', 'DELETE');
+uri('api/projects/{project}/goal', Workspace::class, 'goal', 'PUT');
+uri('api/projects/{project}/stages', Workspace::class, 'stage', 'POST');
+uri('api/projects/{project}/stages/{kind}/order', Workspace::class, 'order', 'PUT');
+uri('api/projects/{project}/stages/{kind}/{id}', Workspace::class, 'updateStage', 'PUT');
+uri('api/projects/{project}/stages/{kind}/{id}', Workspace::class, 'updateStage', 'DELETE');
+uri('api/member-stages/order', Workspace::class, 'memberStageOrder', 'PUT');
+uri('api/member-stages', Workspace::class, 'personalStage', 'POST');
+uri('api/member-stages/{stage}', Workspace::class, 'personalStage', 'PUT');
+uri('api/member-stages/{stage}', Workspace::class, 'personalStage', 'DELETE');
+uri('api/tasks/{task}', Workspace::class, 'taskDetail', 'GET');
+uri('api/tasks', Workspace::class, 'saveTask', 'POST');
+uri('api/tasks/{task}', Workspace::class, 'saveTask', 'PUT');
+uri('api/tasks/reorder', Workspace::class, 'reorderTasks', 'PUT');
+uri('api/tasks/{task}/complete', Workspace::class, 'complete', 'PATCH');
+uri('api/tasks/{task}/product-stage', Workspace::class, 'moveTaskStage', 'PATCH');
+uri('api/tasks/{task}', Workspace::class, 'removeTask', 'DELETE');
+uri('api/labels', Workspace::class, 'label', 'POST');
+uri('api/labels/{label}', Workspace::class, 'label', 'PUT');
+uri('api/labels/{label}', Workspace::class, 'label', 'DELETE');
+uri('api/tasks/{task}/comments', Workspace::class, 'comment', 'POST');
+uri('api/comments/{comment}', Workspace::class, 'editComment', 'POST');
+uri('api/comments/{comment}', Workspace::class, 'editComment', 'PUT');
+uri('api/comments/{comment}', Workspace::class, 'editComment', 'DELETE');
+uri('api/tasks/{task}/attachments', Workspace::class, 'upload', 'POST');
+uri('api/attachments/{attachment}', Workspace::class, 'removeAttachment', 'DELETE');
+uri('api/notifications/read', Workspace::class, 'notifications', 'POST');
+uri('api/notifications/{notification}/read', Workspace::class, 'notifications', 'POST');
+uri('api/settings', Workspace::class, 'settings', 'PUT');
+uri('api/settings/avatar', Workspace::class, 'uploadAvatar', 'POST');
+uri('api/settings/avatar', Workspace::class, 'removeAvatar', 'DELETE');
+uri('api/security/admin-pin', Security::class, 'updateAdminPin', 'PUT');
+uri('api/security/member-pin', Security::class, 'updateMemberPin', 'PUT');
+
+http_response_code(404);
+echo '404 - not found';
