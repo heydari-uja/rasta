@@ -16,15 +16,15 @@
 </div>
 <div class="task-modal-grid">
 <main class="task-modal-main">
-    <div @click.outside="if(taskDetailsEditing){if(taskForm.id&&!taskReadOnly)autosaveTaskNow(true);taskDetailsEditing=false}">
+    <div>
     <div class="task-editor-row"><button type="button" class="completion task-main-completion" x-show="!taskReadOnly" :class="{'checked':taskForm.completed_at||taskForm.completed}" @click="toggleTaskForm()"><span x-show="taskForm.completed_at||taskForm.completed" x-html="$icon('Check')"></span></button>
-        <div class="task-editor-box" :class="{'is-editing':taskDetailsEditing&&!taskReadOnly,'is-readonly':taskReadOnly,'has-error':err('title')}" @focusin="if(!taskReadOnly)taskDetailsEditing=true">
+        <div class="task-editor-box" :class="{'is-editing':!taskReadOnly,'is-readonly':taskReadOnly,'has-error':err('title')}">
             <input class="task-title-editor field-plain" x-model="taskForm.title" :readonly="taskReadOnly" :aria-invalid="err('title')?'true':'false'" aria-label="نام تسک" aria-describedby="task-title-error" @input="if(err('title'))delete errors.title;if(taskForm.id)scheduleTaskAutosave()" placeholder="نام تسک" required maxlength="200">
             <small id="task-title-error" class="field-error" x-text="err('title')"></small>
             <div class="task-description-editor"><span class="task-description-icon" x-html="$icon('List')"></span><textarea class="field-plain" x-model="taskForm.description" :readonly="taskReadOnly" aria-label="توضیحات تسک" @input="autoGrow($event);if(taskForm.id)scheduleTaskAutosave()" placeholder="توضیحات" rows="1" maxlength="10000"></textarea></div>
         </div>
     </div>
-    <div class="task-editor-actions" x-show="taskDetailsEditing && !taskForm.id"><button type="button" class="button button-quiet" @click="closeTaskComposer()">انصراف</button><button type="submit" class="button button-primary" :disabled="taskSaving||busy" :aria-busy="busy?'true':'false'"><span class="button-spinner" x-show="busy" x-cloak x-html="$icon('LoaderCircle')"></span><span>افزودن تسک</span></button></div>
+    <div class="task-editor-actions" x-show="!taskReadOnly"><button type="button" class="button button-quiet" @click="closeTaskComposer()">انصراف</button><button type="submit" class="button button-primary" :disabled="taskSaving||busy" :aria-busy="busy?'true':'false'"><span class="button-spinner" x-show="busy" x-cloak x-html="$icon('LoaderCircle')"></span><span x-text="taskForm.id?'ویرایش تسک':'افزودن تسک'"></span></button></div>
     </div>
     <section class="task-subtasks-section" x-data="{open:true}">
         <button type="button" class="task-subtasks-head" x-show="taskForm.subtasks.length" @click="open=!open" :aria-expanded="open.toString()">

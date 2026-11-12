@@ -1,5 +1,7 @@
 <?php /* converted from partials/task-card.blade.php */ ?>
 ﻿<article class="task-card" :data-task-id="t.id" :draggable="page==='projects'&&canEditTask(t)" @dragstart.stop="if(page==='projects'&&canEditTask(t))beginTaskDrag(t)" @dragend="taskDrag=null" :class="{'is-complete':t.completed_at}">
+    <div class="task-completed-divider"><span>تکمیل شده</span></div>
+    <span class="task-completed-badge" x-show="t.completed_at" role="img" aria-label="انجام‌شده" title="انجام‌شده"><span aria-hidden="true" x-html="$icon('Check')"></span></span>
     <div class="task-card-main">
         <button class="completion" x-show="page==='tasks'&&canEditTask(t)" :class="{'checked':t.completed_at}" @click.stop="toggleTask(t)" :aria-label="(t.completed_at?'باز کردن ':'تکمیل ')+t.title"><span x-show="t.completed_at" x-html="$icon('Check')"></span></button>
         <div class="task-card-copy">

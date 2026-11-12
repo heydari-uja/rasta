@@ -229,8 +229,8 @@ function memberInitials(string $name): string
 
 function assetHead(): string
 {
-    return '<link rel="stylesheet" href="' . e(asset('app/css/app.css')) . '">' .
-        '<script type="module" src="' . e(asset('app/js/app.js')) . '"></script>';
+    return '<link rel="stylesheet" href="'. e(asset('app/css/app.css')) . '">' .
+        '<script type="module" src="'. e(asset('app/js/app.js')) . '"></script>';
 }
 
 function currentMemberId(): ?int

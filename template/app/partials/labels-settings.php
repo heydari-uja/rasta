@@ -62,6 +62,18 @@
                     </form>
                 </div>
 
+                <section class="settings-panel panel" aria-labelledby="settings-task-display-title">
+                    <div class="settings-security-row">
+                        <div class="settings-row-copy">
+                            <h3 id="settings-task-display-title">نمایش تسک‌های انجام شده</h3>
+                        </div>
+                        <label for="settings-show-completed-tasks">
+                            <input id="settings-show-completed-tasks" type="checkbox" x-model="showCompletedTasks" @change="saveCompletedTasksPreference()" aria-describedby="settings-completed-tasks-help">
+                            نمایش کارهای انجام‌شده در تسک‌های من و پروژه‌ها
+                        </label>
+                    </div>
+                </section>
+
                 <section class="settings-logout" aria-labelledby="settings-logout-title">
                     <h3 id="settings-logout-title">خروج از حساب</h3>
                     <form method="POST" action="/logout">

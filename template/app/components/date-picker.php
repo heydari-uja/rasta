@@ -1,4 +1,4 @@
-@props(['model','label'=>'انتخاب تاریخ'])
+<!-- @props(['model','label'=>'انتخاب تاریخ']) -->
 <div class="date-picker" x-data="datePicker" x-modelable="value" x-model="<?= $model ?>" @keydown.escape.stop="open=false">
     <button type="button" class="date-trigger" x-ref="trigger" @click="open=!open;render();if(open)$nextTick(()=>position())" :aria-expanded="open" aria-haspopup="dialog" aria-label="<?= e($label) ?>">
         <span x-text="label()"></span><span x-html="$icon('CalendarDays')"></span>

@@ -10444,6 +10444,7 @@ select:disabled {
     min-width: 0;
     display: flex;
     position: relative;
+    margin-bottom: 12px;
 }
 .sidebar-project-item {
     border-radius: var(--radius-control);
@@ -11292,4 +11293,58 @@ label:has(.field-error:not(:empty))
 @property --tw-drop-shadow-size {
     syntax: "*";
     inherits: false;
+}
+
+.task-card.is-complete {
+    position: relative;
+    border-color: var(--status-success);
+}
+
+.task-card.is-complete .task-card-main {
+    padding-inline-end: 24px;
+}
+
+.task-completed-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    color: var(--status-success);
+    pointer-events: none;
+}
+
+.task-completed-badge svg {
+    width: 18px;
+    height: 18px;
+}
+
+.task-completed-divider {
+    display: none;
+}
+
+.task-card.is-complete:not(.is-complete + .is-complete) {
+    margin-block-start: 32px;
+}
+
+.task-card.is-complete:not(.is-complete + .is-complete) .task-completed-divider {
+    position: absolute;
+    top: -28px;
+    inset-inline: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: var(--text-caption-size);
+    line-height: 20px;
+    pointer-events: none;
+}
+
+.task-completed-divider::after {
+    content: "";
+    flex: 1;
+    border-block-start: 1px solid var(--border-subtle);
+}
+
+div.settings-panel.panel{
+    margin-bottom: 24px;
 }

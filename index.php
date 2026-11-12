@@ -33,4 +33,8 @@ require_once BASE_PATH . '/activities/Auth/Auth.php';
 require_once BASE_PATH . '/activities/Security/Security.php';
 require_once BASE_PATH . '/activities/Workspace/Workspace.php';
 require_once BASE_PATH . '/helpers/helper.php';
+
+// #### TEST SECTION ####
+// dd(asset('app/css/app.css'));
+
 require_once BASE_PATH . '/routes/web.php';
