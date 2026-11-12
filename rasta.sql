@@ -1,4 +1,4 @@
-CREATE DATABASE IF NOT EXISTS rasta CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS rasta CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci;
 USE rasta;
 
 CREATE TABLE members (
@@ -14,7 +14,7 @@ CREATE TABLE members (
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   INDEX members_role_index (role)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE workspace_security (
   id BIGINT UNSIGNED PRIMARY KEY,
@@ -22,7 +22,7 @@ CREATE TABLE workspace_security (
   admin_pin_configured_at TIMESTAMP NULL,
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 INSERT INTO workspace_security (id, member_pin_hash, admin_pin_configured_at, created_at, updated_at)
 VALUES (1, NULL, NULL, NOW(), NOW());
@@ -36,7 +36,7 @@ CREATE TABLE projects (
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   CONSTRAINT projects_created_by_foreign FOREIGN KEY (created_by) REFERENCES members(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE project_members (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -45,7 +45,7 @@ CREATE TABLE project_members (
   UNIQUE KEY project_members_project_id_member_id_unique (project_id, member_id),
   CONSTRAINT project_members_project_id_foreign FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT project_members_member_id_foreign FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE goals (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -58,7 +58,7 @@ CREATE TABLE goals (
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   CONSTRAINT goals_project_id_foreign FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE product_stages (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -71,7 +71,7 @@ CREATE TABLE product_stages (
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   CONSTRAINT product_stages_project_id_foreign FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE member_stages (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -88,7 +88,7 @@ CREATE TABLE member_stages (
   CONSTRAINT member_stages_project_id_foreign FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT member_stages_member_id_foreign FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
   CONSTRAINT member_stages_product_stage_id_foreign FOREIGN KEY (product_stage_id) REFERENCES product_stages(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE tasks (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -112,7 +112,7 @@ CREATE TABLE tasks (
   CONSTRAINT tasks_member_stage_id_foreign FOREIGN KEY (member_stage_id) REFERENCES member_stages(id) ON DELETE SET NULL,
   CONSTRAINT tasks_created_by_foreign FOREIGN KEY (created_by) REFERENCES members(id),
   CONSTRAINT tasks_owner_id_foreign FOREIGN KEY (owner_id) REFERENCES members(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE task_members (
   task_id BIGINT UNSIGNED NOT NULL,
@@ -120,7 +120,7 @@ CREATE TABLE task_members (
   PRIMARY KEY (task_id, member_id),
   CONSTRAINT task_members_task_id_foreign FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   CONSTRAINT task_members_member_id_foreign FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE subtasks (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -131,7 +131,7 @@ CREATE TABLE subtasks (
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   CONSTRAINT subtasks_task_id_foreign FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE labels (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -144,7 +144,7 @@ CREATE TABLE labels (
   updated_at TIMESTAMP NULL,
   CONSTRAINT labels_project_id_foreign FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT labels_member_id_foreign FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE task_labels (
   task_id BIGINT UNSIGNED NOT NULL,
@@ -152,7 +152,7 @@ CREATE TABLE task_labels (
   PRIMARY KEY (task_id, label_id),
   CONSTRAINT task_labels_task_id_foreign FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   CONSTRAINT task_labels_label_id_foreign FOREIGN KEY (label_id) REFERENCES labels(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE comments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -163,7 +163,7 @@ CREATE TABLE comments (
   updated_at TIMESTAMP NULL,
   CONSTRAINT comments_task_id_foreign FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   CONSTRAINT comments_member_id_foreign FOREIGN KEY (member_id) REFERENCES members(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE attachments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -180,7 +180,7 @@ CREATE TABLE attachments (
   CONSTRAINT attachments_task_id_foreign FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   CONSTRAINT attachments_comment_id_foreign FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE,
   CONSTRAINT attachments_member_id_foreign FOREIGN KEY (member_id) REFERENCES members(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE notifications (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -197,7 +197,7 @@ CREATE TABLE notifications (
   CONSTRAINT notifications_author_id_foreign FOREIGN KEY (author_id) REFERENCES members(id) ON DELETE CASCADE,
   CONSTRAINT notifications_task_id_foreign FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   CONSTRAINT notifications_comment_id_foreign FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE task_activities (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -210,4 +210,4 @@ CREATE TABLE task_activities (
   INDEX task_activities_task_id_created_at_index (task_id, created_at),
   CONSTRAINT task_activities_task_id_foreign FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
   CONSTRAINT task_activities_member_id_foreign FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
